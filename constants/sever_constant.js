@@ -14,6 +14,7 @@ module.exports = {
 
     PORT: process.env.PORT,
     CODE_VERSION: process.env.CODE_VERSION,
-    NODE_ENV: process.env.NODE_ENV
+    NODE_ENV: process.env.NODE_ENV,
+    LOCAL_IP: process.env.LOCAL_IP
 }
 
