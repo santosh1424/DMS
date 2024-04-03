@@ -5,10 +5,15 @@ const _ = require('lodash');
 const fnStringlyJSON = (data) => JSON.stringify(data);
 const fnParseJSON = (data) => _fnRecuringJSONPrase(data);
 
+const fnGracefulRestart = (err = "") => {
+    logger.error("Graceful Restart: ", err);
+    return process.exit(1);
+}
 
 module.exports = {
     fnStringlyJSON,
-    fnParseJSON
+    fnParseJSON,
+    fnGracefulRestart
 }
 
 const _fnRecuringJSONPrase = (data) => {

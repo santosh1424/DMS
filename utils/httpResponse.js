@@ -7,11 +7,25 @@ const fnSuccess = (res, message = null) => {
     return res.sendStatus(200).end();
 }
 const fnBadRequest = (res, err = null) => {
-    if (err) logger.error(`fnBadRequest :: ${err}`);
+    if (err) logger.error('fnBadRequest', err);
     return res.sendStatus(400).end();
 }
+const fnUnauthorized = (res, err = null) => {
+    if (err) logger.error('fnUnauthorized', err);
+    return res.sendStatus(401).end();
+}
+const fnConflict = (res, err = null) => res.sendStatus(409).end();
+
+const fnPreConitionFailed = (res, err = null) => {
+    if (err) logger.error('fnPreConitionFailed', err);
+    return res.sendStatus(412).end();
+}
+
 module.exports = {
     fnSendStatus,
     fnSuccess,
-    fnBadRequest
+    fnBadRequest,
+    fnUnauthorized,
+    fnConflict,
+    fnPreConitionFailed,
 }

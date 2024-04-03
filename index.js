@@ -13,6 +13,7 @@ const express = require('express'), cors = require('cors'), httpResponse = requi
 global.constants = require('./constants/sever_constant');
 global.logger = require('./config/logger_config');
 global.helper = require('./utils/helper');
+const { fnDbConnection } = require('./config/database_config');
 
 
 (async (err, data) => {
@@ -30,25 +31,28 @@ global.helper = require('./utils/helper');
 
 
         const http = require('http').Server(app);
-        const _fnListenServer = (async (http) => {
-            http.listen(constants.PORT, constants.LOCAL_IP, () => {
-                logger.info('Server is Up and Running', http.address());
+        // Set keepAliveTimeout and headersTimeout to 10 minutes (650000 milliseconds)
+        http.keepAliveTimeout = 650000;
+        http.headersTimeout = 650000;
+        const fnListenServer = (async (http) => {
+            await http.listen(constants.PORT, constants.LOCAL_IP, async () => {
+                try {
+                    //MongoDB Connection
+                    await fnDbConnection(constants.MONGODB_URI);
+                    logger.info('Server is Up and Running', http.address());
+                } catch (error) {
+                    logger.error(`fnListenServer`, error);
+                    return process.exit(1);
+                }
             })
         })
-        await _fnListenServer(http)
+        await fnListenServer(http)
 
 
     } catch (error) {
-        return logger.error(`Sever ERR ${error}`);
-
+        return helper.fnGracefulRestart(logger.error(`Sever ERR ${error}`));
     }
     return null;
 }
 
 )();
-
-const _fnListenServer = (async (http) => {
-    http.listen(constants.PORT, constants.LOCAL_IP, () => {
-        logger.info('Server is Up and Running', http.address());
-    })
-})
