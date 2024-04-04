@@ -3,8 +3,12 @@
 const fnSendStatus = (res, httStatusCode = 400) => res.sendStatus(httStatusCode)
 
 const fnSuccess = (res, message = null) => {
-    if (message) logger.info(message);
-    return res.sendStatus(200).end();
+    if (message) {
+        logger.info(message);
+        return res.status(200).json({ message });
+    } else {
+        return res.sendStatus(200).end();
+    }
 }
 const fnBadRequest = (res, err = null) => {
     if (err) logger.error('fnBadRequest', err);

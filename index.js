@@ -13,6 +13,7 @@ const express = require('express'), cors = require('cors'), httpResponse = requi
 global.constants = require('./constants/sever_constant');
 global.logger = require('./config/logger_config');
 global.helper = require('./utils/helper');
+global.mongoOps = require('./utils/mongoOps');
 const { fnDbConnection } = require('./config/database_config');
 
 
