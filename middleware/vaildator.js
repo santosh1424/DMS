@@ -27,17 +27,15 @@ const fnAuthenticateToken = (req, res, next) => {
     jwt.verify(token, constants.SECRET_KEY, (err, decoded) => {
         if (err) return httpResponse.fnConflict(res);
         //add decoded token in request
-        req.userToken = decoded;
-        logger.info(`req.body ${req.userToken}`);
+        req.currentUserData = decoded;
         next();
     });
 }
 
 const addAdminVaildate = [
-    check("CN", "Name is Required").not().isEmpty().trim(),
+    check("N", "Name is Required").not().isEmpty().trim(),
     check("E", "Email is Required").not().isEmpty().trim(),
     check("P", "Password is Required").not().isEmpty().trim(),
-    check("TU", "TU is Required").not().isEmpty().isInt(),
     check("MU", "MU is Required").not().isEmpty().isInt(),
 ];
 const addUserVaildate = [

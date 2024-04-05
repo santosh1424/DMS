@@ -13,12 +13,15 @@ const validate = require('../middleware/vaildator')
 router.get('/data', allinOneController.fnTestApp);
 //Admin Routes
 router.post('/addAdmin', [validate.addAdminVaildate, validate.vaildator], allinOneController.fnAddAdmin);
-router.post('/login', [validate.loginVaildate, validate.vaildator], allinOneController.fnLoginAdmin);
+router.post('/login', validate.fnAuthenticateToken, allinOneController.fnLogin);
 //Dashboard
 router.get('/dashboard', validate.fnAuthenticateToken, ((req, res) => {
     res.send("Dashboard");
 }));
 //User Routes
 router.post('/addUser', [validate.addUserVaildate, validate.fnAuthenticateToken, validate.vaildator], allinOneController.fnAddUser);
+// Email
+router.get('/sendOTP', allinOneController.fnSendOTP);
+router.get('/verifyOTP', allinOneController.fnVerifyOTP);
 
 module.exports = router

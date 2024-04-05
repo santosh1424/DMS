@@ -17,7 +17,13 @@ module.exports = {
     NODE_ENV: process.env.NODE_ENV,
     LOCAL_IP: process.env.LOCAL_IP,
     MONGODB_URI: process.env.MONGODB_URI,
-    REDIS_HOST: process.env.REDIS_HOST,
+    // REDIS_HOST: process.env.REDIS_HOST,
     SECRET_KEY: process.env.SECRET_KEY,
+    //EMAIL
+    SMPT_HOST: process.env.SMPT_HOST,
+    SMPT_PORT: process.env.SMPT_PORT,
+    SMPT_MAIL: process.env.SMPT_MAIL,
+    SMPT_APP_PASS: process.env.SMPT_APP_PASS,
+    ...require('./erp_constants')
 }
 
