@@ -16,6 +16,7 @@ module.exports = {
     CODE_VERSION: process.env.CODE_VERSION,
     NODE_ENV: process.env.NODE_ENV,
     LOCAL_IP: process.env.LOCAL_IP,
+    UNDER_MAINTENANCE_MODE: process.env.UNDER_MAINTENANCE_MODE,
     MONGODB_URI: process.env.MONGODB_URI,
     // REDIS_HOST: process.env.REDIS_HOST,
     SECRET_KEY: process.env.SECRET_KEY,

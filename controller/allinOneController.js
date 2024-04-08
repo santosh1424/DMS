@@ -63,9 +63,9 @@ const fnLogin = async (req, res) => {
 
         const isPasswordValid = await bcrypt.compare(req.body.P, user.P);
         if (!isPasswordValid) return httpResponse.fnPreConitionFailed(res);
-        if (!user.EV) return httpResponse.fnConflict(res);
+        // if (!user.EV) return httpResponse.fnConflict(res);
         else {
-            user.token = await jwt.sign({
+            const token = await jwt.sign({
                 E: user.E,
                 N: user.N,
                 BID: user.BID,
@@ -73,7 +73,7 @@ const fnLogin = async (req, res) => {
             }, constants.SECRET_KEY);
 
             //Update TKN in MongoDB Testing only
-            await mongoOps.fnFindOneAndUpdate(userSchema, { E: user.E }, { TKN: user.token })
+            await mongoOps.fnFindOneAndUpdate(userSchema, { E: user.E, BID: user.BID, }, { TKN: token })
             return httpResponse.fnSuccess(res, user);
 
         }
@@ -89,11 +89,14 @@ const fnAddUser = async (req, res) => {
     try {
 
         if (!req.currentUserData || !Object.keys(req.currentUserData).length === 0) return httpResponse.fnUnauthorized(res);
-        if (!req.currentUserData.EV) return httpResponse.fnConflict(res);
+        // if (!req.currentUserData.EV) return httpResponse.fnConflict(res);
         req.body = helper.fnParseJSON(req.body)
         const hashedPassword = await bcrypt.hash(req.body.P, 10);
-        req.body.BID = parseInt(req.currentUserData.BID)
-        await mongoOps.fnFindOneAndUpdate(userSchema, { E: req.body.E, N: req.body.N }, { ...req.body, P: hashedPassword }, { new: true, upsert: true, lean: true })
+        req.body.BID = parseInt(req.currentUserData.BID);
+        //Update Total User
+        await mongoOps.fnFindOneAndUpdate(adminSchema, { BID: req.currentUserData.BID, E: req.currentUserData.E }, { $inc: { TU: 1 } });
+        // Add User
+        await mongoOps.fnFindOneAndUpdate(userSchema, { E: req.body.E, N: req.body.N, BID: req.currentUserData.BID }, { ...req.body, P: hashedPassword }, { new: true, upsert: true, lean: true })
         return httpResponse.fnSuccess(res);
     } catch (error) {
         logger.error('fnAddUser', error)
@@ -107,13 +110,13 @@ const fnAddUser = async (req, res) => {
 const fnEditUser = async (req, res) => {
     try {
         if (!req.currentUserData || !Object.keys(req.currentUserData).length === 0) return httpResponse.fnUnauthorized(res);
-        if (!req.currentUserData.EV) return httpResponse.fnConflict(res);
-        req.body = helper.fnParseJSON(req.body);
-        if (!ObjectID(req.body._id)) return httpResponse.fnUnauthorized(res);
-        const user = await mongoOps.fnFindOne(userSchema, { _id: ObjectID(req.body._id), E: req.body.E });
-        if (!user) return httpResponse.fnPreConitionFailed(res);
-        const isPasswordValid = await bcrypt.compare(req.body.P, admin.P);
-        if (!isPasswordValid) return httpResponse.fnUnauthorized(res);
+        // if (!req.currentUserData.EV) return httpResponse.fnConflict(res);
+        req.body = helper.fnParseJSON(req.body)
+        const hashedPassword = await bcrypt.hash(req.body.P, 10);
+        req.body.BID = parseInt(req.currentUserData.BID);
+        // Edit User
+        await mongoOps.fnFindOneAndUpdate(userSchema, { R: req.body.R, N: req.body.N, BID: req.currentUserData.BID }, { ...req.body, P: hashedPassword })
+        return httpResponse.fnSuccess(res);
     } catch (error) {
         logger.error('fnEditUser', error)
         if (error.code === 11000) return httpResponse.fnConflict(res);//MongoDB DuplicateKey error
@@ -122,17 +125,39 @@ const fnEditUser = async (req, res) => {
 
 }
 
+//Get BasicUser in DMS
+const fnGetUser = async (req, res) => {
+    try {
+        if (!req.currentUserData || !Object.keys(req.currentUserData).length === 0) return httpResponse.fnUnauthorized(res);
+        // if (!req.currentUserData.EV) return httpResponse.fnConflict(res);
+        req.body = helper.fnParseJSON(req.body);
+        if (!ObjectID(req.body._id)) return httpResponse.fnUnauthorized(res);
+        const user = await mongoOps.fnFindOne(userSchema, { _id: ObjectID(req.body._id), BID: req.currentUserData.BID });
+        if (!user) return httpResponse.fnPreConitionFailed(res);
+        return httpResponse.fnSuccess(res, user);
+    } catch (error) {
+        logger.error('fnGetUser', error)
+        if (error.code === 11000) return httpResponse.fnConflict(res);//MongoDB DuplicateKey error
+        else return httpResponse.fnBadRequest(res);
+    }
+
+}
+
 const fnSendOTP = async (req, res) => {
     try {
-        const email = "varungokte.codium@gmail.com"//req.query;
-        const otp = helper.fnRandomNumber(100000, 999999); // Generate a 6-digit OTP
+        const email = req.query.email;//"varungokte.codium@gmail.com"//
+        const otp = helper.fnRandomNumber(1000, 9999); // Generate a 6-digit OTP
         await mongoOps.fnFindOneAndUpdate(otpSchema, { E: email }, { E: email, otp }, { new: true, upsert: true, lean: true })
 
         // Send OTP via email
         await _sendEmail({
             to: email,
-            subject: 'This is Your OTP for ERP',
-            message: `<p>Your OTP is: <strong>${otp}</strong></p>`,
+            subject: 'Email Verification for ERP',
+            message: `<h1>Your OTP for ERP</h1>
+            <p>Dear User,</p>
+            <p>Your OTP is: <strong>${otp}</strong></p>
+            <p>Please use this OTP to complete your action on our platform.</p>
+            <p>Thank you!</p>`,
         });
 
         return httpResponse.fnSuccess(res, 'OTP sent successfully');
@@ -167,7 +192,8 @@ module.exports = {
     fnAddUser,
     fnEditUser,
     fnSendOTP,
-    fnVerifyOTP
+    fnVerifyOTP,
+    fnGetUser
 }
 
 const _sendEmail = async (options) => {

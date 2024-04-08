@@ -12,16 +12,18 @@ const validate = require('../middleware/vaildator')
 
 router.get('/data', allinOneController.fnTestApp);
 //Admin Routes
-router.post('/addAdmin', [validate.addAdminVaildate, validate.vaildator], allinOneController.fnAddAdmin);
-router.post('/login', validate.fnAuthenticateToken, allinOneController.fnLogin);
+router.post('/addAdmin', [validate.adminAddVaildate, validate.vaildator], allinOneController.fnAddAdmin);
+router.post('/login', [validate.loginVaildate, validate.vaildator], allinOneController.fnLogin);
 //Dashboard
 router.get('/dashboard', validate.fnAuthenticateToken, ((req, res) => {
     res.send("Dashboard");
 }));
 //User Routes
-router.post('/addUser', [validate.addUserVaildate, validate.fnAuthenticateToken, validate.vaildator], allinOneController.fnAddUser);
+router.post('/addUser', [validate.userAddVaildate, validate.fnAuthenticateToken, validate.vaildator], allinOneController.fnAddUser);
+router.post('/editUser', [validate.userEditVaildate, validate.fnAuthenticateToken, validate.vaildator], allinOneController.fnEditUser);
+router.post('/getUser', validate.fnAuthenticateToken, allinOneController.fnGetUser);
 // Email
-router.get('/sendOTP', allinOneController.fnSendOTP);
-router.get('/verifyOTP', allinOneController.fnVerifyOTP);
+router.get('/sendOTP', validate.fnAuthenticateToken, allinOneController.fnSendOTP);
+router.get('/verifyOTP', validate.fnAuthenticateToken, allinOneController.fnVerifyOTP);
 
 module.exports = router

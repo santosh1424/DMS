@@ -15,7 +15,7 @@ global.logger = require('./config/logger_config');
 global.helper = require('./utils/helper');
 global.mongoOps = require('./utils/mongoOps');
 const { fnDbConnection } = require('./config/database_config');
-
+const { fnMaintenancesCheck } = require('./middleware/vaildator');
 
 (async (err, data) => {
     if (err) logger.error(err);
@@ -26,6 +26,8 @@ const { fnDbConnection } = require('./config/database_config');
         app.use(express.urlencoded({ extended: true }));
 
         app.use(cors({}));
+        // Use maintenance middleware for all routes
+        app.use(fnMaintenancesCheck);
 
         app.get('/health', (req, res) => res.sendStatus(200).end());
         app.use(require('./routes'));
