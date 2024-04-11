@@ -28,7 +28,7 @@ const fnAuthenticateToken = (req, res, next) => {
         jwt.verify(token, constants.SECRET_KEY, (err, decoded) => {
             if (err) return httpResponse.fnConflict(res);
             //add decoded token in request
-            req.currentUserData = decoded;
+            req.currentUserData = decoded || null;
             next();
         });
         return null;

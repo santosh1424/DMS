@@ -74,7 +74,7 @@ const fnLogin = async (req, res) => {
 
             //Update TKN in MongoDB Testing only
             await mongoOps.fnFindOneAndUpdate(userSchema, { E: user.E, BID: user.BID, }, { TKN: token })
-            return httpResponse.fnSuccess(res, user);
+            return httpResponse.fnSuccess(res, token);
 
         }
     } catch (error) {
@@ -136,7 +136,7 @@ const fnGetUser = async (req, res) => {
         if (!user) return httpResponse.fnPreConitionFailed(res);
         return httpResponse.fnSuccess(res, user);
     } catch (error) {
-        logger.error('fnGetUser', error)
+        logger.error('fnGetUser', error);
         if (error.code === 11000) return httpResponse.fnConflict(res);//MongoDB DuplicateKey error
         else return httpResponse.fnBadRequest(res);
     }
@@ -145,12 +145,15 @@ const fnGetUser = async (req, res) => {
 
 const fnSendOTP = async (req, res) => {
     try {
-        const email = req.query.email;//"varungokte.codium@gmail.com"//
+        if (!req.currentUserData || !Object.keys(req.currentUserData).length === 0) return httpResponse.fnUnauthorized(res);
+        const email = req.currentUserData.E;
         const otp = helper.fnRandomNumber(1000, 9999); // Generate a 6-digit OTP
         await mongoOps.fnFindOneAndUpdate(otpSchema, { E: email }, { E: email, otp }, { new: true, upsert: true, lean: true })
 
-        // Send OTP via email
+        // Send OTP via email 
         await _sendEmail({
+            // bcc: "gauricodium210@gmail.com",
+            // cc: "varungokte.codium@gmail.com",
             to: email,
             subject: 'Email Verification for ERP',
             message: `<h1>Your OTP for ERP</h1>
@@ -159,7 +162,7 @@ const fnSendOTP = async (req, res) => {
             <p>Please use this OTP to complete your action on our platform.</p>
             <p>Thank you!</p>`,
         });
-
+        logger.debug(req.currentUserData, email, otp)
         return httpResponse.fnSuccess(res, 'OTP sent successfully');
     } catch (error) {
         logger.error('fnSendOTP', error);
@@ -168,15 +171,22 @@ const fnSendOTP = async (req, res) => {
     }
 };
 
-const fnVerifyOTP = async (req, res, next) => {
+const fnVerifyOTP = async (req, res) => {
     try {
-        const { email, otp } = req.query;
+        if (!req.currentUserData || !Object.keys(req.currentUserData).length === 0) return httpResponse.fnUnauthorized(res);
+        const otp = req.body.otp;
+        const email = req.currentUserData.E;
 
-        const existingOTP = await mongoOps.fnFindOneAndDelete(otpSchema, { E: email, otp })//await Otps.findOneAndDelete({ email, otp });
-
+        const existingOTP = await mongoOps.fnFindOneAndDelete(otpSchema, { E: email, otp });
         if (existingOTP) {
-            await mongoOps.fnFindOneAndUpdate(userSchema, { E: req.body.E }, { EV: 1 })
-            return httpResponse.fnSuccess(res, 'OTP verification successful');// OTP is Valid
+            const token = await jwt.sign({
+                E: req.currentUserData.E,
+                N: req.currentUserData.N,
+                BID: req.currentUserData.BID,
+                EV: 1,
+            }, constants.SECRET_KEY);
+            await mongoOps.fnFindOneAndUpdate(userSchema, { E: req.currentUserData.E }, { EV: 1, TKN: token });
+            return httpResponse.fnSuccess(res, token);// OTP is Valid
         }
         else return httpResponse.fnPreConitionFailed(res);// OTP is Invalid
     } catch (error) {
@@ -185,6 +195,27 @@ const fnVerifyOTP = async (req, res, next) => {
     }
 };
 
+//Adding  in DMS
+const fnAddTeamMember = async (req, res) => {
+    try {
+
+        if (!req.currentUserData || !Object.keys(req.currentUserData).length === 0) return httpResponse.fnUnauthorized(res);
+        // if (!req.currentUserData.EV) return httpResponse.fnConflict(res);
+        req.body = helper.fnParseJSON(req.body)
+        const hashedPassword = await bcrypt.hash(req.body.P, 10);
+        req.body.BID = parseInt(req.currentUserData.BID);
+        //Update Total User
+        await mongoOps.fnFindOneAndUpdate(adminSchema, { BID: req.currentUserData.BID, E: req.currentUserData.E }, { $inc: { TU: 1 } });
+        // Add User
+        await mongoOps.fnFindOneAndUpdate(userSchema, { E: req.body.E, N: req.body.N, BID: req.currentUserData.BID }, { ...req.body, P: hashedPassword }, { new: true, upsert: true, lean: true })
+        return httpResponse.fnSuccess(res);
+    } catch (error) {
+        logger.error('fnAddTeam', error)
+        if (error.code === 11000) return httpResponse.fnConflict(res);//MongoDB DuplicateKey error
+        else return httpResponse.fnBadRequest(res);
+
+    }
+};
 module.exports = {
     fnTestApp,
     fnAddAdmin,
@@ -193,7 +224,8 @@ module.exports = {
     fnEditUser,
     fnSendOTP,
     fnVerifyOTP,
-    fnGetUser
+    fnGetUser,
+    fnAddTeamMember
 }
 
 const _sendEmail = async (options) => {
@@ -211,6 +243,8 @@ const _sendEmail = async (options) => {
     const mailOptions = {
         from: process.env.SMPT_MAIL,
         to: options.to,
+        // cc: options.cc,
+        // bcc: options.bcc,
         subject: options.subject,
         html: options.message,
     };

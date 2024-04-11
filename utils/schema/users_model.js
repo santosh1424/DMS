@@ -33,6 +33,7 @@ const user = new mongoose.Schema({
         trim: true,
         default: 1
     },
+    EV: Number,
     BID: {
         type: Number,
         required: true,
