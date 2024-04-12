@@ -9,14 +9,18 @@
 
 require('dotenv').config();
 const express = require('express'), cors = require('cors'), httpResponse = require('./utils/httpResponse');
+const Redis = require('ioredis');
 
 global.constants = require('./constants/sever_constant');
 global.logger = require('./config/logger_config');
 global.helper = require('./utils/helper');
 global.mongoOps = require('./utils/mongoOps');
+global.redisOps = require('./utils/redisOps');
+global.redisKeys = require('./utils/redisKeys');
 const { fnDbConnection } = require('./config/database_config');
 const { fnMaintenancesCheck } = require('./middleware/vaildator');
-
+global.redisClient = new Redis(constants.REDIS_URI);
+const configureSocketIO = require('./config/socketConfig');
 (async (err, data) => {
     if (err) logger.error(err);
     try {
@@ -42,6 +46,8 @@ const { fnMaintenancesCheck } = require('./middleware/vaildator');
                 try {
                     //MongoDB Connection
                     await fnDbConnection(constants.MONGODB_URI);
+                    // Configure Socket.IO using the exported function
+                    const io = configureSocketIO(http);
                     logger.info('Server is Up and Running', http.address());
                 } catch (error) {
                     logger.error(`fnListenServer`, error);

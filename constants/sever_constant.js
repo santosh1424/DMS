@@ -18,7 +18,7 @@ module.exports = {
     LOCAL_IP: process.env.LOCAL_IP,
     UNDER_MAINTENANCE_MODE: process.env.UNDER_MAINTENANCE_MODE,
     MONGODB_URI: process.env.MONGODB_URI,
-    // REDIS_HOST: process.env.REDIS_HOST,
+    REDIS_URI: process.env.REDIS_URI,
     SECRET_KEY: process.env.SECRET_KEY,
     //EMAIL
     SMPT_HOST: process.env.SMPT_HOST,

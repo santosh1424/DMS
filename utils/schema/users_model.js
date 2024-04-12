@@ -33,10 +33,13 @@ const user = new mongoose.Schema({
         trim: true,
         default: 1
     },
-    EV: Number,
     BID: {
         type: Number,
         required: true,
+    },
+    _adminId: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'admins_model'
     }
 });
 
@@ -52,11 +55,10 @@ module.exports = mongoose.model('users_model', user);
  * R- Role
  * TKN-Token
  * S-
- * -1:Delete 
- * 0:Active
- * 1:UnActive
+ * 1:Unverified
+ * 2:Active
+ * 3:UnActive
  * 
  * BID-Business ID
- * EV-Email Verified
  * 
  */

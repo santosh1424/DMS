@@ -8,14 +8,14 @@
  */
 
 
-const fnFind = async(collectionName, query = {}, projection = {}, options = { new: true, lean: true }) => {
+const fnFind = async (collectionName, query = {}, projection = {}, options = { new: true, lean: true }) => {
     return await collectionName.find(query, projection, options)
 }
 
-const fnFindOne = async(collectionName, query, projection = {}, options = { new: true, lean: true }) => {
+const fnFindOne = async (collectionName, query, projection = {}, options = { new: true, lean: true }) => {
     return await collectionName.findOne(query, projection, options)
 }
-const fnFindOneAndUpdate =async (collectionName, query, update, options = { new: true, lean: true }) => {
+const fnFindOneAndUpdate = async (collectionName, query, update, options = { new: true, lean: true }) => {
     return await collectionName.findOneAndUpdate(query, update, options)
 }
 

@@ -14,6 +14,10 @@ const fnUnauthorized = (res, err = null) => {
     if (err) logger.error('fnUnauthorized', err);
     return res.sendStatus(401).end();
 }
+const fnForbidden = (res, err = null) => {
+    if (err) logger.error('fnForbidden', err);
+    return res.sendStatus(403).end();
+}
 const fnConflict = (res, err = null) => res.sendStatus(409).end();
 const fnNotFound = (res, err = null) => res.sendStatus(404).end();
 
@@ -28,6 +32,7 @@ module.exports = {
     fnSuccess,
     fnBadRequest,
     fnUnauthorized,
+    fnForbidden,
     fnConflict,
     fnPreConitionFailed,
     fnServiceUnavailable,

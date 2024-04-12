@@ -20,10 +20,14 @@ router.get('/dashboard', validate.fnAuthenticateToken, ((req, res) => {
 }));
 //User Routes
 router.post('/addUser', [validate.userAddVaildate, validate.fnAuthenticateToken, validate.vaildator], allinOneController.fnAddUser);
-router.post('/editUser', [validate.userEditVaildate, validate.fnAuthenticateToken, validate.vaildator], allinOneController.fnEditUser);
+router.post('/editUser', validate.fnAuthenticateToken, allinOneController.fnEditUser);
 router.post('/getUser', validate.fnAuthenticateToken, allinOneController.fnGetUser);
+
+//Team Routes
+router.post('/addTeam', [validate.userAddVaildate, validate.fnAuthenticateToken, validate.vaildator], allinOneController.fnAddTeamMember);
+
 // Email
 router.get('/sendOTP', validate.fnAuthenticateToken, allinOneController.fnSendOTP);
-router.get('/verifyOTP', validate.fnAuthenticateToken, allinOneController.fnVerifyOTP);
+router.post('/verifyOTP', validate.fnAuthenticateToken, allinOneController.fnVerifyOTP);
 
 module.exports = router
