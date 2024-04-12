@@ -37,7 +37,7 @@ const { fnMaintenancesCheck } = require('./middleware/vaildator');
         // Set keepAliveTimeout and headersTimeout to 10 minutes (650000 milliseconds)
         http.keepAliveTimeout = 650000;
         http.headersTimeout = 650000;
-        const fnListenServer = (async (http) => {
+        const fnListenServer = async (http) => {
             await http.listen(constants.PORT, constants.LOCAL_IP, async () => {
                 try {
                     //MongoDB Connection
@@ -47,15 +47,14 @@ const { fnMaintenancesCheck } = require('./middleware/vaildator');
                     logger.error(`fnListenServer`, error);
                     return process.exit(1);
                 }
-            })
-        })
-        await fnListenServer(http)
-
+            });
+        }
+        await fnListenServer(http);
 
     } catch (error) {
-        return helper.fnGracefulRestart(logger.error(`Sever ERR ${error}`));
+        // Graceful Restart if error occurs
+        return helper.fnGracefulRestart(logger.error(`Server ERR ${error}`));
     }
     return null;
-}
+})();
 
-)();
