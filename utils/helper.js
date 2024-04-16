@@ -10,7 +10,7 @@ const fnStringlyJSON = (data) => JSON.stringify(data);
 const fnParseJSON = (data) => _fnRecuringJSONPrase(data);
 
 const fnGracefulRestart = (err = "") => {
-    logger.error("Graceful Restart: ", err);
+    logger.warn("Graceful Restart: ", err);
     return process.exit(1);
 }
 const fnRandomNumber = (min, max) => Math.floor(Math.random() * (max - min + 1)) + min;

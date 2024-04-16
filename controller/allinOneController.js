@@ -8,9 +8,11 @@
  */
 const _ = require('lodash');
 const httpResponse = require('../utils/httpResponse');
-const adminSchema = require('../utils/schema/admins_model');
-const userSchema = require('../utils/schema/users_model');
-const otpSchema = require('../utils/schema/otp_model');
+const adminSchema = require('../utils/schema/mongo/admins_model');
+const userSchema = require('../utils/schema/mongo/users_model');
+// const otpSchema = require('../utils/schema/mongo/otp_model');
+const redisKeys = require('../utils/schema/redis/redisKeys');
+const redisSchema = require('../utils/schema/redis/model/allinOne_schema')
 const bcrypt = require('bcryptjs')
 const jwt = require('jsonwebtoken');
 const nodeMailer = require("nodemailer");
@@ -22,7 +24,7 @@ const fnTestApp = (req, res) => {
         return res.status(200).json({ message });
 
     } catch (err) {
-        return logger.error('fnTestApp', err)
+        return logger.warn('fnTestApp', err)
 
     }
 
@@ -31,9 +33,9 @@ const fnTestApp = (req, res) => {
 //Adding SuperUser in DMS
 const fnAddAdmin = async (req, res) => {
     try {
-        req.body = helper.fnParseJSON(req.body)
+        req.body = helper.fnParseJSON(req.body) || null;
         const hashedPassword = await bcrypt.hash(req.body.P, 10);
-        req.body.MU = constants.maxUser[req.body.MU];
+        req.body.MU = constants.maxUser[req.body.MU];//server constants
 
         //Adding User in Admin Schema
         const admin = await mongoOps.fnFindOneAndUpdate(adminSchema, { E: req.body.E, N: req.body.N }, { ...req.body, P: hashedPassword }, { new: true, upsert: true, projection: { P: 0, __v: 0 } },);
@@ -47,7 +49,7 @@ const fnAddAdmin = async (req, res) => {
         await mongoOps.fnFindOneAndUpdate(userSchema, { E: req.body.E, N: req.body.N }, { ...req.body, P: hashedPassword }, { new: true, upsert: true, lean: true, projection: { P: 0, __v: 0 } });
         return httpResponse.fnSuccess(res);
     } catch (error) {
-        logger.error('fnAddAdmin', error)
+        logger.warn('fnAddAdmin', error)
         if (error.code === 11000) return httpResponse.fnConflict(res);//DuplicateKey error
         else return httpResponse.fnBadRequest(res);
 
@@ -57,28 +59,30 @@ const fnAddAdmin = async (req, res) => {
 //Login for any Users in DMS
 const fnLogin = async (req, res) => {
     try {
-        req.body = helper.fnParseJSON(req.body)
-        const user = await mongoOps.fnFindOne(userSchema, { E: req.body.E })
+        req.body = helper.fnParseJSON(req.body) || null;
+        const user = await mongoOps.fnFindOne(userSchema, { E: req.body.E }, { __v: 0 });
         if (!user) return httpResponse.fnUnauthorized(res);
-
         const isPasswordValid = await bcrypt.compare(req.body.P, user.P);
+
         if (!isPasswordValid) return httpResponse.fnPreConitionFailed(res);
-        if (user.S > 2) return httpResponse.fnConflict(res);
-        else {
-            const token = await jwt.sign({
-                E: user.E,
-                N: user.N,
-                BID: user.BID,
-                S: user.S || 0,
-            }, constants.SECRET_KEY);
+        else if (user.S > 2) return httpResponse.fnConflict(res);
+        //Create a new TKN
+        const token = await jwt.sign({
+            E: user.E,
+            N: user.N,
+            BID: user.BID,
+            S: user.S || 0,
+        }, constants.SECRET_KEY);
 
-            //Update TKN in MongoDB Testing only
-            await mongoOps.fnFindOneAndUpdate(userSchema, { E: user.E, BID: user.BID, }, { TKN: token })
-            return httpResponse.fnSuccess(res, token);
+        //Update TKN in MongoDB
+        const updateUserTKN = await mongoOps.fnFindOneAndUpdate(userSchema, { E: user.E, BID: user.BID, }, { TKN: token }, { new: true, lean: true, projection: { P: 0, __v: 0 } });
+        //Add user in redis
+        await redisClient.hmset(redisKeys.fnUserKey(user.BID, user._id), await redisSchema.fnSetUserSchema(updateUserTKN));
+        return httpResponse.fnSuccess(res, token);
 
-        }
+
     } catch (error) {
-        logger.error('fnLoginAdmin', error)
+        logger.warn('fnLoginAdmin', error)
         return httpResponse.fnBadRequest(res);
     }
 
@@ -88,19 +92,26 @@ const fnLogin = async (req, res) => {
 const fnAddUser = async (req, res) => {
     try {
         if (!req.currentUserData || !Object.keys(req.currentUserData).length === 0) return httpResponse.fnUnauthorized(res);
-        req.body = helper.fnParseJSON(req.body)
+        req.body = helper.fnParseJSON(req.body) || null
         const hashedPassword = await bcrypt.hash(req.body.P, 10);
-        req.body.BID = parseInt(req.currentUserData.BID);
+        const BID = parseInt(req.currentUserData.BID) || 0;//UUID
+        if (!BID) return httpResponse.fnPreConitionFailed(res);
+
         //Update Total User
-        const admin = await mongoOps.fnFindOneAndUpdate(adminSchema, { BID: req.currentUserData.BID, E: req.currentUserData.E }, { $inc: { TU: 1 } });
+        const admin = await mongoOps.fnFindOneAndUpdate(adminSchema, { BID, E: req.currentUserData.E }, { $inc: { TU: 1 } });
         if (!admin || !Object.keys(admin).length === 0) return httpResponse.fnForbidden(res)
-        req.body._adminId = admin._id;//Add Details
+        const _adminId = admin._id
+        req.body._adminId = _adminId;//Add Details
         req.body.P = hashedPassword; //Add Password
+        req.body.BID = BID;//Add BID
+
         // Add User
-        await mongoOps.fnFindOneAndUpdate(userSchema, { E: req.body.E, N: req.body.N, BID: req.currentUserData.BID }, { ...req.body }, { new: true, upsert: true, lean: true })
+        const addedUser = await mongoOps.fnFindOneAndUpdate(userSchema, { E: req.body.E, N: req.body.N, BID }, { ...req.body }, { new: true, upsert: true, lean: true })
+        await redisClient.sadd(redisKeys.fnAddUserKey(BID, _adminId), addedUser._id)
+
         return httpResponse.fnSuccess(res);
     } catch (error) {
-        logger.error('fnAddUser', error)
+        logger.warn('fnAddUser', error)
         if (error.code === 11000) return httpResponse.fnConflict(res);//MongoDB DuplicateKey error
         else return httpResponse.fnBadRequest(res);
 
@@ -122,7 +133,7 @@ const fnEditUser = async (req, res) => {
         await mongoOps.fnFindOneAndUpdate(userSchema, { BID: req.currentUserData.BID, E: req.currentUserData.E }, updateUser)
         return httpResponse.fnSuccess(res);
     } catch (error) {
-        logger.error('fnEditUser', error)
+        logger.warn('fnEditUser', error)
         if (error.code === 11000) return httpResponse.fnConflict(res);//MongoDB DuplicateKey error
         else return httpResponse.fnBadRequest(res);
     }
@@ -139,8 +150,8 @@ const fnGetUser = async (req, res) => {
         if (!user) return httpResponse.fnPreConitionFailed(res);
         return httpResponse.fnSuccess(res, user);
     } catch (error) {
-        logger.error('fnGetUser', error);
-        if (error.code === 11000) return httpResponse.fnConflict(res);//MongoDB DuplicateKey error
+        logger.warn('fnGetUser', error);
+        if (error.code === 11000) return httpResponse.fnConflict(res);//MongoDB DuplicateKey error  
         else return httpResponse.fnBadRequest(res);
     }
 
@@ -149,9 +160,16 @@ const fnGetUser = async (req, res) => {
 const fnSendOTP = async (req, res) => {
     try {
         if (!req.currentUserData || !Object.keys(req.currentUserData).length === 0) return httpResponse.fnUnauthorized(res);
+        if (parseInt(req.currentUserData.S) == 1) return httpResponse.fnConflict(res);
         const email = req.currentUserData.E;
         const otp = helper.fnRandomNumber(1000, 9999); // Generate a 6-digit OTP
-        await mongoOps.fnFindOneAndUpdate(otpSchema, { E: email }, { E: email, otp }, { new: true, upsert: true, lean: true })
+        const otpKey = await redisKeys.fnOTPKey(req.currentUserData.BID, email)
+
+        const existingOTP = await redisClient.get(otpKey);
+
+        if (existingOTP) await redisClient.set(otpKey, otp);
+        else await redisClient.set(otpKey, otp, 'EX', 300); // Expire in 5 minutes (300 seconds)
+
 
         // Send OTP via email 
         await _sendEmail({
@@ -165,10 +183,10 @@ const fnSendOTP = async (req, res) => {
             <p>Please use this OTP to complete your action on our platform.</p>
             <p>Thank you!</p>`,
         });
-        logger.debug('Sending...Email', req.currentUserData, email, otp);
+        logger.debug('Sending...Email', email, otp);
         return httpResponse.fnSuccess(res, 'OTP sent successfully');
     } catch (error) {
-        logger.error('fnSendOTP', error);
+        logger.warn('fnSendOTP', error);
         return httpResponse.fnBadRequest(res);
 
     }
@@ -179,21 +197,28 @@ const fnVerifyOTP = async (req, res) => {
         if (!req.currentUserData || !Object.keys(req.currentUserData).length === 0) return httpResponse.fnUnauthorized(res);
         const otp = req.body.otp;
         const email = req.currentUserData.E;
+        const BID = parseInt(req.currentUserData.BID);
+        const otpKey = await redisKeys.fnOTPKey(req.currentUserData.BID, email)
+        // const existingOTP = await mongoOps.fnFindOneAndDelete(otpSchema, { E: email, otp });
+        const existingOTP = await redisClient.get(otpKey) || null;
 
-        const existingOTP = await mongoOps.fnFindOneAndDelete(otpSchema, { E: email, otp });
-        if (existingOTP) {
-            const token = await jwt.sign({
-                E: req.currentUserData.E,
+        if (existingOTP && existingOTP == otp) { // OTP is Valid
+            await redisClient.del(otpKey);
+
+            const TKN = await jwt.sign({
+                E: email,
                 N: req.currentUserData.N,
-                BID: req.currentUserData.BID,
+                BID,
                 S: 2,
             }, constants.SECRET_KEY);
-            await mongoOps.fnFindOneAndUpdate(userSchema, { E: req.currentUserData.E }, { S: 2, TKN: token });
-            return httpResponse.fnSuccess(res, token);// OTP is Valid
-        }
-        else return httpResponse.fnPreConitionFailed(res);// OTP is Invalid
+            //User Status and TKN
+            const updateUserTKN = await mongoOps.fnFindOneAndUpdate(userSchema, { E: email }, { S: 2, TKN });
+            await redisClient.hmset(redisKeys.fnUserKey(BID, updateUserTKN._id), await redisSchema.fnSetUserSchema(updateUserTKN));
+            return httpResponse.fnSuccess(res, token);
+
+        } else return httpResponse.fnPreConitionFailed(res);// OTP is Invalid
     } catch (error) {
-        logger.error('fnVerifyOTP ', error);
+        logger.warn('fnVerifyOTP ', error);
         return httpResponse.fnBadRequest(res);
     }
 };
@@ -212,7 +237,7 @@ const fnAddTeamMember = async (req, res) => {
         await mongoOps.fnFindOneAndUpdate(userSchema, { E: req.body.E, N: req.body.N, BID: req.currentUserData.BID }, { ...req.body, P: hashedPassword }, { new: true, upsert: true, lean: true })
         return httpResponse.fnSuccess(res);
     } catch (error) {
-        logger.error('fnAddTeam', error)
+        logger.warn('fnAddTeam', error)
         if (error.code === 11000) return httpResponse.fnConflict(res);//MongoDB DuplicateKey error
         else return httpResponse.fnBadRequest(res);
 

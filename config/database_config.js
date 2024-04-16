@@ -7,8 +7,9 @@ const fnDbConnection = (uri) => {
             logger.info(`Connected to MongoDB`);
         })
         .catch((error) => {
-            return logger.error('Failed to connect to MongoDB', error);
+            return logger.warn('Failed to connect to MongoDB', error);
 
         });
+    return null;
 }
 module.exports = { fnDbConnection } 

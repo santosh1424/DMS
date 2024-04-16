@@ -29,11 +29,12 @@ const fnAuthenticateToken = (req, res, next) => {
             if (err) return httpResponse.fnConflict(res);
             //add decoded token in request
             req.currentUserData = decoded || null;
+            logger.debug(decoded)
             next();
         });
         return null;
     } catch (error) {
-        return logger.error(error);
+        return logger.warn(error);
 
     }
 
@@ -66,7 +67,7 @@ const fnMaintenancesCheck = (req, res, next) => {
         if (parseInt(constants.UNDER_MAINTENANCE_MODE)) return httpResponse.fnServiceUnavailable(res);
         else next();
     } catch (error) {
-        return logger.error(error);
+        return logger.warn(error);
     }
 }
 module.exports = {

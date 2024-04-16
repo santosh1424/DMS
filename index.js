@@ -10,19 +10,21 @@
 require('dotenv').config();
 const express = require('express'), cors = require('cors'), httpResponse = require('./utils/httpResponse');
 const Redis = require('ioredis');
+const socketIO = require('socket.io');
 
 global.constants = require('./constants/sever_constant');
 global.logger = require('./config/logger_config');
 global.helper = require('./utils/helper');
 global.mongoOps = require('./utils/mongoOps');
 global.redisOps = require('./utils/redisOps');
-global.redisKeys = require('./utils/redisKeys');
+global.redisKeys = require('./utils/schema/redis/redisKeys');
+global.redisClient = new Redis(constants.REDIS_URI);//Redis Connection
+global.redisSubscriber = new Redis(constants.REDIS_URI);//Redis Connection
 const { fnDbConnection } = require('./config/database_config');
 const { fnMaintenancesCheck } = require('./middleware/vaildator');
-global.redisClient = new Redis(constants.REDIS_URI);
-const configureSocketIO = require('./config/socketConfig');
+const { fnConfigureSocketIO } = require('./config/socketConfig');
 (async (err, data) => {
-    if (err) logger.error(err);
+    if (err) logger.warn(err);
     try {
         const app = express();
 
@@ -44,13 +46,17 @@ const configureSocketIO = require('./config/socketConfig');
         const fnListenServer = async (http) => {
             await http.listen(constants.PORT, constants.LOCAL_IP, async () => {
                 try {
-                    //MongoDB Connection
-                    await fnDbConnection(constants.MONGODB_URI);
-                    // Configure Socket.IO using the exported function
-                    const io = configureSocketIO(http);
+                    await fnDbConnection(constants.MONGODB_URI);//MongoDB Connection
+                    const io = socketIO(http, {
+                        reconnection: true,
+                        // Enable reconnection
+                        // reconnectionAttempts: 3, // Number of reconnection attempts
+                        //reconnectionDelay: 10000, // Delay between reconnection attempts (in milliseconds)
+                    });
+                    await fnConfigureSocketIO(io);//Socket Connection
                     logger.info('Server is Up and Running', http.address());
                 } catch (error) {
-                    logger.error(`fnListenServer`, error);
+                    logger.warn(`fnListenServer`, error);
                     return process.exit(1);
                 }
             });
@@ -59,7 +65,7 @@ const configureSocketIO = require('./config/socketConfig');
 
     } catch (error) {
         // Graceful Restart if error occurs
-        return helper.fnGracefulRestart(logger.error(`Server ERR ${error}`));
+        return helper.fnGracefulRestart(logger.warn(`Server ERR ${error}`));
     }
     return null;
 })();
