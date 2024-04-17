@@ -49,6 +49,11 @@ const { fnConfigureSocketIO } = require('./config/socketConfig');
                     await fnDbConnection(constants.MONGODB_URI);//MongoDB Connection
                     const io = socketIO(http, {
                         reconnection: true,
+                        reconnection: true,
+                        cors: {
+                            origin: ["http://localhost:5173", "http://192.168.1.9:3000", "http://localhost:3000"]//Frontend ip
+                            // origin: "*"
+                        }
                         // Enable reconnection
                         // reconnectionAttempts: 3, // Number of reconnection attempts
                         //reconnectionDelay: 10000, // Delay between reconnection attempts (in milliseconds)

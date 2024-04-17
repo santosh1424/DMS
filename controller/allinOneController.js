@@ -78,7 +78,7 @@ const fnLogin = async (req, res) => {
         const updateUserTKN = await mongoOps.fnFindOneAndUpdate(userSchema, { E: user.E, BID: user.BID, }, { TKN: token }, { new: true, lean: true, projection: { P: 0, __v: 0 } });
         //Add user in redis
         await redisClient.hmset(redisKeys.fnUserKey(user.BID, user._id), await redisSchema.fnSetUserSchema(updateUserTKN));
-        return httpResponse.fnSuccess(res, token);
+        return httpResponse.fnSuccess(res, { token, _userID: updateUserTKN._id });
 
 
     } catch (error) {
