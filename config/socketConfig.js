@@ -2,7 +2,7 @@
 // socketConfig.js
 const jwt = require('jsonwebtoken');
 const { handleAllEvents } = require('../utils/allEvents'); // Import event handler for chat-related events
-const { fnPublish, fnSubscribe } = require('../utils/pubsub');
+// const { fnPublish, fnSubscribe } = require('../utils/pubsub');
 const redisSchema = require('../utils/schema/redis/model/allinOne_schema')
 // Function to configure and return a Socket.IO instance
 const fnConfigureSocketIO = async (io) => {
