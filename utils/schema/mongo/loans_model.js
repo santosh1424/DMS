@@ -61,6 +61,7 @@ module.exports = mongoose.model('loan_model', loanSchema);
 
 /**
  * Loan_Basic
+ * |1|**Basic Details**||
  * 
  *  AID-Agreement Id
  *  Z-Zone
@@ -121,7 +122,7 @@ module.exports = mongoose.model('loan_model', loanSchema);
  *       V- Value DSRA
  *  
  * 
- * ||**Security Details**||
+ * |2|**Security Details**||
  * 
  *  S-Share(%)
  *  DV-Date of Valuation
@@ -137,7 +138,7 @@ module.exports = mongoose.model('loan_model', loanSchema);
  *      
  *      V- Value
  * 
- * ||**Bank Details**||
+ * |3|**Bank Details**||
  *  AN-Account Name
  *  BAN-Bank Account Number
  *  AT-Account Type

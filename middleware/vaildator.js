@@ -52,6 +52,9 @@ const userAddVaildate = [
     check("E", "Email is Required").not().isEmpty().trim(),
     check("P", "Password is Required").not().isEmpty().trim(),
 ];
+const createLoanVaildate = [
+    // check("AID", "Name is Required").not().isEmpty().trim()
+];
 const userEditVaildate = [
     check("N", "Name is Required").not().isEmpty().trim(),
     check("R", "Role is Required").not().isEmpty().trim(),
@@ -77,5 +80,6 @@ module.exports = {
     userEditVaildate,
     adminAddVaildate,
     loginVaildate,
+    createLoanVaildate,
     fnMaintenancesCheck
 }
