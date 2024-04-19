@@ -23,8 +23,8 @@ router.post('/addUser', [validate.userAddVaildate, validate.fnAuthenticateToken,
 router.post('/editUser', validate.fnAuthenticateToken, allinOneController.fnEditUser);
 router.post('/getUser', validate.fnAuthenticateToken, allinOneController.fnGetUser);
 
-//Loan Routes
-router.post('/CreateLoan', [validate.createLoanVaildate, validate.fnAuthenticateToken, validate.vaildator], allinOneController.fnCreateLoan);
+//Team Routes
+router.post('/addTeam', [validate.userAddVaildate, validate.fnAuthenticateToken, validate.vaildator], allinOneController.fnAddTeamMember);
 
 // Email
 router.get('/sendOTP', validate.fnAuthenticateToken, allinOneController.fnSendOTP);

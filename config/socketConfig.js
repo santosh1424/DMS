@@ -2,19 +2,34 @@
 // socketConfig.js
 const jwt = require('jsonwebtoken');
 const { handleAllEvents } = require('../utils/allEvents'); // Import event handler for chat-related events
+// const { fnPublish, fnSubscribe } = require('../utils/pubsub');
+const redisSchema = require('../utils/schema/redis/model/allinOne_schema')
 // Function to configure and return a Socket.IO instance
 const fnConfigureSocketIO = async (io) => {
     try {
+
         // Authenticate Socket connection handling
         await io.use(async (socket, next) => {
-            const { token, _userId } = socket.handshake.query || socket.handshake.auth;
-            if (!token && !_userId) return null;
+            const { token, _userID } = socket.handshake.query || socket.handshake.auth;
+            if (!token && !_userID) return null;
+
+            // // Example usage: Subscribe to a Redis channel and handle incoming messages
+            // const channelName = 'BusinessChannel';
+
+            // await fnSubscribe(channelName, (receivedMessage) => {
+            //     logger.debug(`Received message from ${receivedMessage.sender}: ${receivedMessage.text}`);
+            // });
+
+            // // Example usage: Publish a message to a Redis channel
+            // const message = { sender: 'SantoshLocal', text: 'Hello, world!' };
+
+            // await fnPublish(channelName, message);
             // Verify JWT token
             jwt.verify(token, constants.SECRET_KEY, async (err, decoded) => {
                 if (err) return next(new Error('Authentication Error'));
                 // Attach userId to socket for future use
-                socket._userId = _userId;
-                await redisClient.hset(redisKeys.fnUserKey(decoded.BID, _userId), "_socketid", socket.id);
+                socket._userId = _userID;
+                await redisClient.hset(redisKeys.fnUserKey(decoded.BID, _userID), "_socketid", socket.id);
                 next();
             });
         });
