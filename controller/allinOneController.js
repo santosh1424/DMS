@@ -257,7 +257,6 @@ module.exports = {
     fnSendOTP,
     fnVerifyOTP,
     fnGetUser,
-    fnAddTeamMember,
     fnCreateLoan
 }
 
