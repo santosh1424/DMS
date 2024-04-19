@@ -10,6 +10,8 @@ const _ = require('lodash');
 const httpResponse = require('../utils/httpResponse');
 const adminSchema = require('../utils/schema/mongo/admins_model');
 const userSchema = require('../utils/schema/mongo/users_model');
+const loanSchema = require('../utils/schema/mongo/loans_model');
+const contactsSchema = require('../utils/schema/mongo/contacts_model');
 // const otpSchema = require('../utils/schema/mongo/otp_model');
 const redisKeys = require('../utils/schema/redis/redisKeys');
 const redisSchema = require('../utils/schema/redis/model/allinOne_schema')
@@ -78,7 +80,7 @@ const fnLogin = async (req, res) => {
         const updateUserTKN = await mongoOps.fnFindOneAndUpdate(userSchema, { E: user.E, BID: user.BID, }, { TKN: token }, { new: true, lean: true, projection: { P: 0, __v: 0 } });
         //Add user in redis
         await redisClient.hmset(redisKeys.fnUserKey(user.BID, user._id), await redisSchema.fnSetUserSchema(updateUserTKN));
-        return httpResponse.fnSuccess(res, { token, _userID: updateUserTKN._id });
+        return httpResponse.fnSuccess(res, { token, _userId: updateUserTKN._id });
 
 
     } catch (error) {
@@ -223,21 +225,24 @@ const fnVerifyOTP = async (req, res) => {
     }
 };
 
-//Adding  in DMS
-const fnAddTeamMember = async (req, res) => {
+//Create Loan
+const fnCreateLoan = async (req, res) => {
     try {
 
         if (!req.currentUserData || !Object.keys(req.currentUserData).length === 0) return httpResponse.fnUnauthorized(res);
         req.body = helper.fnParseJSON(req.body)
-        const hashedPassword = await bcrypt.hash(req.body.P, 10);
-        req.body.BID = parseInt(req.currentUserData.BID);
-        //Update Total User
-        await mongoOps.fnFindOneAndUpdate(adminSchema, { BID: req.currentUserData.BID, E: req.currentUserData.E }, { $inc: { TU: 1 } });
-        // Add User
-        await mongoOps.fnFindOneAndUpdate(userSchema, { E: req.body.E, N: req.body.N, BID: req.currentUserData.BID }, { ...req.body, P: hashedPassword }, { new: true, upsert: true, lean: true })
-        return httpResponse.fnSuccess(res);
+        const BID = parseInt(req.currentUserData.BID);
+        //Update Total User 
+        // loanSchema
+        // contactsSchema
+        const createLoan = await mongoOps.fnFindOneAndUpdate(loanSchema, { AID: req.body.AID, BID }, { ...req.body }, { new: true, upsert: true, lean: true })
+        await redisClient.sadd(redisKeys.fnAddUserKey(BID, _adminId), addedUser._id);
+
+        await redisClient.hmset(redisKeys.fnUserKey(user.BID, user._id), await redisSchema.fnSetUserSchema(updateUserTKN));
+        return httpResponse.fnSuccess(res, { token, _loanID: createLoan._id });
+
     } catch (error) {
-        logger.warn('fnAddTeam', error)
+        logger.warn('fnCreateLoan', error)
         if (error.code === 11000) return httpResponse.fnConflict(res);//MongoDB DuplicateKey error
         else return httpResponse.fnBadRequest(res);
 
@@ -252,7 +257,8 @@ module.exports = {
     fnSendOTP,
     fnVerifyOTP,
     fnGetUser,
-    fnAddTeamMember
+    fnAddTeamMember,
+    fnCreateLoan
 }
 
 const _sendEmail = async (options) => {
