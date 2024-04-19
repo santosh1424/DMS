@@ -23,15 +23,15 @@ global.redisSubscriber = new Redis(constants.REDIS_URI);//Redis Connection
 const { fnDbConnection } = require('./config/database_config');
 const { fnMaintenancesCheck } = require('./middleware/vaildator');
 const { fnConfigureSocketIO } = require('./config/socketConfig');
-(async (err, data) => {
+(async (err) => {
     if (err) logger.warn(err);
     try {
         const app = express();
 
-        app.use(express.json({}));
+        app.use(express.json());
         app.use(express.urlencoded({ extended: true }));
 
-        app.use(cors({}));
+        app.use(cors());
         // Use maintenance middleware for all routes
         app.use(fnMaintenancesCheck);
 
@@ -48,15 +48,12 @@ const { fnConfigureSocketIO } = require('./config/socketConfig');
                 try {
                     await fnDbConnection(constants.MONGODB_URI);//MongoDB Connection
                     const io = socketIO(http, {
-                        reconnection: true,
-                        reconnection: true,
+                        reconnection: true,// Enable reconnection
+                        reconnectionDelay: 1000, // Delay between reconnection attempts (in milliseconds)
+                        // reconnectionAttempts: 3, // Number of reconnection attempts
                         cors: {
                             origin: ["http://localhost:5173", "http://192.168.1.9:3000", "http://localhost:3000"]//Frontend ip
-                            // origin: "*"
                         }
-                        // Enable reconnection
-                        // reconnectionAttempts: 3, // Number of reconnection attempts
-                        //reconnectionDelay: 10000, // Delay between reconnection attempts (in milliseconds)
                     });
                     await fnConfigureSocketIO(io);//Socket Connection
                     logger.info('Server is Up and Running', http.address());
@@ -70,7 +67,7 @@ const { fnConfigureSocketIO } = require('./config/socketConfig');
 
     } catch (error) {
         // Graceful Restart if error occurs
-        return helper.fnGracefulRestart(logger.warn(`Server ERR ${error}`));
+        return await helper.fnGracefulRestart(error);
     }
     return null;
 })();

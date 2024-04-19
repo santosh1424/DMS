@@ -35,7 +35,7 @@ module.exports = mongoose.model('contact_model', contactDetailsSchema);
 /**
  * 
  * 
- * ||**Contact Details**||
+ * |4|**Contact Details**||
  *  CT-Contact Type
  *  R-Recipient
  *      1-to
@@ -66,26 +66,3 @@ module.exports = mongoose.model('contact_model', contactDetailsSchema);
  *  RP-Register Pincode
  * 
  */
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-e
