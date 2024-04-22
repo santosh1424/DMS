@@ -24,7 +24,8 @@ router.post('/editUser', validate.fnAuthenticateToken, allinOneController.fnEdit
 router.post('/getUser', validate.fnAuthenticateToken, allinOneController.fnGetUser);
 
 //Loan Routes
-router.post('/CreateLoan', [validate.createLoanVaildate, validate.fnAuthenticateToken, validate.vaildator], allinOneController.fnCreateLoan);
+router.post('/createLoan', validate.fnAuthenticateToken, allinOneController.fnCreateLoan);
+router.get('/getLoan', validate.fnAuthenticateToken, allinOneController.fnGetLoan);
 
 // Email
 router.get('/sendOTP', validate.fnAuthenticateToken, allinOneController.fnSendOTP);

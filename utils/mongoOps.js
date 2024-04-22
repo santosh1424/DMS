@@ -22,10 +22,34 @@ const fnFindOneAndUpdate = async (collectionName, query, update, options = { new
 const fnFindOneAndDelete = async (collectionName, query, projection = {}) => {
     return await collectionName.findOneAndDelete(query, projection)
 }
+const fnAggregate = async (collectionName, pipeline = []) => {
+    return await collectionName.aggregate(pipeline).exec();
+};
+
+const fnDeleteOne = async (collectionName, query) => {
+    return await collectionName.deleteOne(query);
+};
+
+const fnDeleteMany = async (collectionName, query) => {
+    return await collectionName.deleteMany(query);
+};
+
+const fnInsertOne = async (collectionName, document) => {
+    return await collectionName.create(document);
+};
+
+const fnInsertMany = async (collectionName, documents) => {
+    return await collectionName.insertMany(documents);
+};
 
 module.exports = {
     fnFind,
     fnFindOne,
     fnFindOneAndUpdate,
     fnFindOneAndDelete,
+    fnAggregate,
+    fnDeleteOne,
+    fnDeleteMany,
+    fnInsertOne,
+    fnInsertMany
 }

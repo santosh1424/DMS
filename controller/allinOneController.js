@@ -230,16 +230,35 @@ const fnCreateLoan = async (req, res) => {
     try {
 
         if (!req.currentUserData || !Object.keys(req.currentUserData).length === 0) return httpResponse.fnUnauthorized(res);
-        req.body = helper.fnParseJSON(req.body)
+        req.body = helper.fnParseJSON(req.body);
         const BID = parseInt(req.currentUserData.BID);
         //Update Total User 
         // loanSchema
         // contactsSchema
         const createLoan = await mongoOps.fnFindOneAndUpdate(loanSchema, { AID: req.body.AID, BID }, { ...req.body }, { new: true, upsert: true, lean: true })
-        await redisClient.sadd(redisKeys.fnAddUserKey(BID, _adminId), addedUser._id);
 
-        await redisClient.hmset(redisKeys.fnUserKey(user.BID, user._id), await redisSchema.fnSetUserSchema(updateUserTKN));
-        return httpResponse.fnSuccess(res, { token, _loanID: createLoan._id });
+        await redisClient.hmset(redisKeys.fnLoanKey(BID, createLoan._id), await redisSchema.fnSetLoanSchema(createLoan));
+        return httpResponse.fnSuccess(res, { _loanId: createLoan._id });
+
+    } catch (error) {
+        logger.warn('fnCreateLoan', error)
+        if (error.code === 11000) return httpResponse.fnConflict(res);//MongoDB DuplicateKey error
+        else return httpResponse.fnBadRequest(res);
+
+    }
+};
+const fnGetLoan = async (req, res) => {
+    try {
+
+        if (!req.currentUserData || !Object.keys(req.currentUserData).length === 0) return httpResponse.fnUnauthorized(res);
+        const BID = parseInt(req.currentUserData.BID);
+        //Update Total User 
+        // loanSchema
+        // contactsSchemaallLoan
+        const allLoan = await mongoOps.fnFind(loanSchema, { BID })
+
+        //await redisClient.hmset(redisKeys.fnLoanKey(BID, createLoan._id), await redisSchema.fnSetLoanSchema(createLoan));
+        return httpResponse.fnSuccess(res, { allLoan });
 
     } catch (error) {
         logger.warn('fnCreateLoan', error)
@@ -257,7 +276,8 @@ module.exports = {
     fnSendOTP,
     fnVerifyOTP,
     fnGetUser,
-    fnCreateLoan
+    fnCreateLoan,
+    fnGetLoan
 }
 
 const _sendEmail = async (options) => {

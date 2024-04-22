@@ -34,7 +34,7 @@ const fnAuthenticateToken = (req, res, next) => {
         });
         return null;
     } catch (error) {
-        return logger.warn(error);
+        return logger.warn('fnAuthenticateToken',error);
 
     }
 
