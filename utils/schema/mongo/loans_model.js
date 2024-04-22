@@ -71,6 +71,10 @@ module.exports = mongoose.model('loan_model', loanSchema);
  *       4:North
  *  
  *  CN- Company Name
+ *  PN- PAN Nuber
+ *  GN-Group Name
+ *  CIN Number 
+ *  GST Number
  *  I- Industry
  *       1:Real Estate
  *       2:NBFC 

@@ -8,7 +8,7 @@ const fnConfigureSocketIO = async (io) => {
         // Authenticate Socket connection handling
         await io.use(async (socket, next) => {
             const { token, _userId } = socket.handshake.query || socket.handshake.auth;
-            if (!token && !_userId) return null;
+            if (!token || !_userId) return null;
             // Verify JWT token
             jwt.verify(token, constants.SECRET_KEY, async (err, decoded) => {
                 if (err) return next(new Error('Authentication Error'));

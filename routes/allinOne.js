@@ -21,10 +21,11 @@ router.get('/dashboard', validate.fnAuthenticateToken, ((req, res) => {
 //User Routes
 router.post('/addUser', [validate.userAddVaildate, validate.fnAuthenticateToken, validate.vaildator], allinOneController.fnAddUser);
 router.post('/editUser', validate.fnAuthenticateToken, allinOneController.fnEditUser);
-router.post('/getUser', validate.fnAuthenticateToken, allinOneController.fnGetUser);
+router.get('/getUser', validate.fnAuthenticateToken, allinOneController.fnGetUser);
+router.get('/getAllUsers', validate.fnAuthenticateToken, allinOneController.fnGetAllUsers);
 
-//Loan Routes
-router.post('/createLoan', validate.fnAuthenticateToken, allinOneController.fnCreateLoan);
+//Loan Routes 
+router.post('/createLoan',[validate.createLoanVaildate, validate.fnAuthenticateToken, validate.vaildator], allinOneController.fnCreateLoan);
 router.get('/getLoan', validate.fnAuthenticateToken, allinOneController.fnGetLoan);
 
 // Email

@@ -29,12 +29,11 @@ const fnAuthenticateToken = (req, res, next) => {
             if (err) return httpResponse.fnConflict(res);
             //add decoded token in request
             req.currentUserData = decoded || null;
-            logger.debug(decoded)
             next();
         });
         return null;
     } catch (error) {
-        return logger.warn('fnAuthenticateToken',error);
+        return logger.warn('fnAuthenticateToken', error);
 
     }
 
@@ -53,7 +52,19 @@ const userAddVaildate = [
     check("P", "Password is Required").not().isEmpty().trim(),
 ];
 const createLoanVaildate = [
-    // check("AID", "Name is Required").not().isEmpty().trim()
+    check("AID", "AID is Required").not().isEmpty().trim(),
+    check("Z", "Z is Required").not().isEmpty().isInt(),
+    check("CN", "CN is Required").not().isEmpty().trim(),
+    check("PN", "PN is Required").not().isEmpty().trim(),
+    check("GN", "GN is Required").not().isEmpty().trim(),
+    check("I", "I is Required").not().isEmpty().isInt(),
+    check("SA", "SA is Required").not().isEmpty().isInt(),
+    check("HA", "HA is Required").not().isEmpty().isInt(),
+    check("PS", "PS is Required").not().isEmpty().isInt(),
+    check("T", "T is Required").not().isEmpty().isInt(),
+    check("ST", "ST is Required").not().isEmpty().isInt(),
+    check("SD", "SD is Required").not().isEmpty().trim(),
+    check("CD", "CD is Required").not().isEmpty().trim()
 ];
 const userEditVaildate = [
     check("N", "Name is Required").not().isEmpty().trim(),

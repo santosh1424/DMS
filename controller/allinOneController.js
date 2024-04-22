@@ -146,13 +146,27 @@ const fnEditUser = async (req, res) => {
 const fnGetUser = async (req, res) => {
     try {
         if (!req.currentUserData || !Object.keys(req.currentUserData).length === 0) return httpResponse.fnUnauthorized(res);
-        req.body = helper.fnParseJSON(req.body);
-        if (!ObjectID(req.body._id)) return httpResponse.fnUnauthorized(res);
-        const user = await mongoOps.fnFindOne(userSchema, { _id: ObjectID(req.body._id), BID: req.currentUserData.BID });
+        const _userId = ObjectID(req.query._id) || null;
+        if (!_userId) return httpResponse.fnUnauthorized(res);
+        const user = await mongoOps.fnFindOne(userSchema, { _id: _userId, BID: req.currentUserData.BID });
         if (!user) return httpResponse.fnPreConitionFailed(res);
         return httpResponse.fnSuccess(res, user);
     } catch (error) {
         logger.warn('fnGetUser', error);
+        if (error.code === 11000) return httpResponse.fnConflict(res);//MongoDB DuplicateKey error  
+        else return httpResponse.fnBadRequest(res);
+    }
+
+}
+//Get ALL BasicUser in DMS
+const fnGetAllUsers = async (req, res) => {
+    try {
+        if (!req.currentUserData || !Object.keys(req.currentUserData).length === 0) return httpResponse.fnUnauthorized(res);
+        const BID = parseInt(req.currentUserData.BID) || 0;
+        const alluser = await mongoOps.fnFind(userSchema, { BID },{__v:0,P:0});
+        return httpResponse.fnSuccess(res, alluser);
+    } catch (error) {
+        logger.warn('fnGetAllUsers', error);
         if (error.code === 11000) return httpResponse.fnConflict(res);//MongoDB DuplicateKey error  
         else return httpResponse.fnBadRequest(res);
     }
@@ -231,12 +245,13 @@ const fnCreateLoan = async (req, res) => {
 
         if (!req.currentUserData || !Object.keys(req.currentUserData).length === 0) return httpResponse.fnUnauthorized(res);
         req.body = helper.fnParseJSON(req.body);
+        if (!req.body || !Object.keys(req.body).length === 0) return httpResponse.fnPreConitionFailed(res);
         const BID = parseInt(req.currentUserData.BID);
-        //Update Total User 
-        // loanSchema
-        // contactsSchema
-        const createLoan = await mongoOps.fnFindOneAndUpdate(loanSchema, { AID: req.body.AID, BID }, { ...req.body }, { new: true, upsert: true, lean: true })
+        const option = { new: true, lean: true, upsert: true };
+        // if (req.query.type == 'add') option.upsert = true;
 
+        //Update Total User : loanSchema ,contactsSchema
+        const createLoan = await mongoOps.fnFindOneAndUpdate(loanSchema, { AID: req.body.AID, BID }, { ...req.body }, option)
         await redisClient.hmset(redisKeys.fnLoanKey(BID, createLoan._id), await redisSchema.fnSetLoanSchema(createLoan));
         return httpResponse.fnSuccess(res, { _loanId: createLoan._id });
 
@@ -276,6 +291,7 @@ module.exports = {
     fnSendOTP,
     fnVerifyOTP,
     fnGetUser,
+    fnGetAllUsers,
     fnCreateLoan,
     fnGetLoan
 }
