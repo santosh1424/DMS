@@ -8,6 +8,7 @@
  */
 const _ = require('lodash');
 const httpResponse = require('../utils/httpResponse');
+const aes = require('../utils/aes');
 const { check, validationResult } = require('express-validator')
 const jwt = require('jsonwebtoken');
 
@@ -34,6 +35,16 @@ const fnAuthenticateToken = (req, res, next) => {
         return null;
     } catch (error) {
         return logger.warn('fnAuthenticateToken', error);
+
+    }
+
+}
+const fnDecryptBody = async (req, res, next) => {
+    try {
+        req.body = await aes.fnDecryptAES(req.body.data);   
+        return next();
+    } catch (error) {
+        return logger.warn('fnDecryptBody', error);
 
     }
 
@@ -87,6 +98,7 @@ const fnMaintenancesCheck = (req, res, next) => {
 module.exports = {
     vaildator,
     fnAuthenticateToken,
+    fnDecryptBody,
     userAddVaildate,
     userEditVaildate,
     adminAddVaildate,

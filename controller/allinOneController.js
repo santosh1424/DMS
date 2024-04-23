@@ -13,6 +13,7 @@ const userSchema = require('../utils/schema/mongo/users_model');
 const loanSchema = require('../utils/schema/mongo/loans_model');
 const contactsSchema = require('../utils/schema/mongo/contacts_model');
 // const otpSchema = require('../utils/schema/mongo/otp_model');
+const aes = require('../utils/aes');
 const redisKeys = require('../utils/schema/redis/redisKeys');
 const redisSchema = require('../utils/schema/redis/model/allinOne_schema')
 const bcrypt = require('bcryptjs')
@@ -30,6 +31,26 @@ const fnTestApp = (req, res) => {
 
     }
 
+}
+const fnEncryptTest = async (req, res) => {
+    try {
+        const data = await aes.fnEncryptAES(req.body.data);
+        return res.status(200).json({ data });
+    } catch (err) {
+        logger.warn('fnEncryptTest', err)
+        return httpResponse.fnBadRequest(res);
+
+    }
+}
+
+const fnDecryptTest = async (req, res) => {
+    try {
+        const data = await aes.fnDecryptAES(req.body.data);
+        return res.status(200).json({ data });
+    } catch (err) {
+        logger.warn('fnDecryptTest', err)
+        return httpResponse.fnBadRequest(res);
+    }
 }
 
 //Adding SuperUser in DMS
@@ -80,9 +101,9 @@ const fnLogin = async (req, res) => {
         const updateUserTKN = await mongoOps.fnFindOneAndUpdate(userSchema, { E: user.E, BID: user.BID, }, { TKN: token }, { new: true, lean: true, projection: { P: 0, __v: 0 } });
         //Add user in redis
         await redisClient.hmset(redisKeys.fnUserKey(user.BID, user._id), await redisSchema.fnSetUserSchema(updateUserTKN));
-        return httpResponse.fnSuccess(res, { token, _userId: updateUserTKN._id });
-
-
+        //Encryption
+        const data = await aes.fnEncryptAES({ token, _userId: updateUserTKN._id })
+        return httpResponse.fnSuccess(res, data);
     } catch (error) {
         logger.warn('fnLoginAdmin', error)
         return httpResponse.fnBadRequest(res);
@@ -163,8 +184,9 @@ const fnGetAllUsers = async (req, res) => {
     try {
         if (!req.currentUserData || !Object.keys(req.currentUserData).length === 0) return httpResponse.fnUnauthorized(res);
         const BID = parseInt(req.currentUserData.BID) || 0;
-        const alluser = await mongoOps.fnFind(userSchema, { BID },{__v:0,P:0});
-        return httpResponse.fnSuccess(res, alluser);
+        //Encryption
+        const data = await aes.fnEncryptAES(await mongoOps.fnFind(userSchema, { BID }, { __v: 0, P: 0 }))
+        return httpResponse.fnSuccess(res, data);
     } catch (error) {
         logger.warn('fnGetAllUsers', error);
         if (error.code === 11000) return httpResponse.fnConflict(res);//MongoDB DuplicateKey error  
@@ -262,6 +284,7 @@ const fnCreateLoan = async (req, res) => {
 
     }
 };
+
 const fnGetLoan = async (req, res) => {
     try {
 
@@ -284,6 +307,8 @@ const fnGetLoan = async (req, res) => {
 };
 module.exports = {
     fnTestApp,
+    fnEncryptTest,
+    fnDecryptTest,
     fnAddAdmin,
     fnLogin,
     fnAddUser,

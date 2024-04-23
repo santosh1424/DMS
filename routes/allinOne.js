@@ -11,6 +11,8 @@ const allinOneController = require('../controller/allinOneController');
 const validate = require('../middleware/vaildator')
 
 router.get('/data', allinOneController.fnTestApp);
+router.post('/encrypt', allinOneController.fnEncryptTest);
+router.post('/decrypt', allinOneController.fnDecryptTest);
 //Admin Routes
 router.post('/addAdmin', [validate.adminAddVaildate, validate.vaildator], allinOneController.fnAddAdmin);
 router.post('/login', [validate.loginVaildate, validate.vaildator], allinOneController.fnLogin);
@@ -25,7 +27,7 @@ router.get('/getUser', validate.fnAuthenticateToken, allinOneController.fnGetUse
 router.get('/getAllUsers', validate.fnAuthenticateToken, allinOneController.fnGetAllUsers);
 
 //Loan Routes 
-router.post('/createLoan',[validate.createLoanVaildate, validate.fnAuthenticateToken, validate.vaildator], allinOneController.fnCreateLoan);
+router.post('/createLoan', [validate.createLoanVaildate, validate.fnAuthenticateToken, validate.vaildator], allinOneController.fnCreateLoan);
 router.get('/getLoan', validate.fnAuthenticateToken, allinOneController.fnGetLoan);
 
 // Email

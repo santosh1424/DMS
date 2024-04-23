@@ -1,17 +1,17 @@
 const crypto = require('crypto');
-
+const sPassword = 'supersecret';
+const _ = require('lodash');
 // Encryption function using async/await with arrow function
-
-const encrypt = async (text, password) => {
+const encrypt = async (data) => {
     try {
-        if (!text || !password) {
-            throw new Error('Invalid input. Text and password are required.');
-        }
+        if (!data) throw new Error('Invalid input');
 
         const algorithm = 'aes-256-cbc';
-        const key = crypto.createHash('sha256').update(password).digest().slice(0, 32); // Derive 32-byte key
-
+        const key = crypto.createHash('sha256').update(sPassword).digest().slice(0, 32); // Derive 32-byte key
         const iv = crypto.randomBytes(16); // Generate a random IV (Initialization Vector)
+
+        // Serialize data to JSON string before encryption
+        const text = JSON.stringify(data);
 
         const cipher = crypto.createCipheriv(algorithm, key, iv);
         let encrypted = cipher.update(text, 'utf8', 'hex');
@@ -26,18 +26,16 @@ const encrypt = async (text, password) => {
     }
 };
 
-
 // Decryption function using async/await with arrow function
-const decrypt = async (encryptedText, password) => {
+const decrypt = async (data) => {
     try {
-        if (!encryptedText || !password) {
-            throw new Error('Invalid input. Encrypted text and password are required.');
-        }
+        if (!data) throw new Error('Invalid input.');
 
         const algorithm = 'aes-256-cbc';
-        const key = crypto.createHash('sha256').update(password).digest().slice(0, 32); // Derive 32-byte key
+        const key = crypto.createHash('sha256').update(sPassword).digest().slice(0, 32); // Derive 32-byte key
+        // const encryptedText=data
+        const encryptedBuffer = Buffer.from(data, 'hex');
 
-        const encryptedBuffer = Buffer.from(encryptedText, 'hex');
         const iv = encryptedBuffer.subarray(0, 16);
         const encryptedData = encryptedBuffer.subarray(16);
 
@@ -50,9 +48,10 @@ const decrypt = async (encryptedText, password) => {
         throw new Error('Decryption failed');
     }
 };
+
 // Example usage
 const runEncryptionDecryption = async () => {
-    const plaintext = 'Hello, world!';
+    const plaintext = { a: 'hi', b: 1 };
     const password = 'supersecret';
 
     try {

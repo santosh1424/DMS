@@ -20,6 +20,7 @@ global.redisOps = require('./utils/redisOps');
 global.redisKeys = require('./utils/schema/redis/redisKeys');
 global.redisClient = new Redis(constants.REDIS_URI);//Redis Connection
 global.redisSubscriber = new Redis(constants.REDIS_URI);//Redis Connection
+// global.aes = require('./utils/aes');
 const { fnDbConnection } = require('./config/database_config');
 const { fnMaintenancesCheck } = require('./middleware/vaildator');
 const { fnConfigureSocketIO } = require('./config/socketConfig');

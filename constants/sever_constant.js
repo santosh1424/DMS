@@ -20,6 +20,7 @@ module.exports = {
     MONGODB_URI: process.env.MONGODB_URI,
     REDIS_URI: process.env.REDIS_URI,
     SECRET_KEY: process.env.SECRET_KEY,
+    ENCRYPTION_KEY: process.env.ENCRYPTION_KEY,
     //EMAIL
     SMPT_HOST: process.env.SMPT_HOST,
     SMPT_PORT: process.env.SMPT_PORT,
