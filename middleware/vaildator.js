@@ -14,34 +14,32 @@ const jwt = require('jsonwebtoken');
 
 const vaildator = (req, res, next) => {
     const vaildationError = validationResult(req).mapped();
-    if (_.keys(vaildationError).length > 0) return httpResponse.fnPreConitionFailed(res);
+    if (_.keys(vaildationError).length > 0) return httpResponse.fnPreConditionFailed(res);
     next()
 }
 
-const fnAuthenticateToken = (req, res, next) => {
+const fnAuthenticateToken = async (req, res, next) => {
     try {
         const authHeader = req.headers['authorization'];
-        const token = authHeader && authHeader.split(' ')[1];
+        let data = authHeader && authHeader.split(' ')[1];
 
-        if (!token) return httpResponse.fnUnauthorized(res);
-
+        if (!data) return httpResponse.fnUnauthorized(res);
+        data = await aes.fnDecryptAES(data);
         // Verify token
-        jwt.verify(token, constants.SECRET_KEY, (err, decoded) => {
+        jwt.verify(data.TKN, constants.SECRET_KEY, (err, decoded) => {
             if (err) return httpResponse.fnConflict(res);
             //add decoded token in request
             req.currentUserData = decoded || null;
             next();
         });
-        return null;
     } catch (error) {
         return logger.warn('fnAuthenticateToken', error);
-
     }
 
 }
 const fnDecryptBody = async (req, res, next) => {
     try {
-        req.body = await aes.fnDecryptAES(req.body.data);   
+        req.body = await aes.fnDecryptAES(req.body.data);
         return next();
     } catch (error) {
         return logger.warn('fnDecryptBody', error);
@@ -77,6 +75,12 @@ const createLoanVaildate = [
     check("SD", "SD is Required").not().isEmpty().trim(),
     check("CD", "CD is Required").not().isEmpty().trim()
 ];
+const createContactVaildate = [
+    //CT CE CN _loanId
+    check("AID", "AID is Required").not().isEmpty().trim(),
+    check("CN", "CN is Required").not().isEmpty().trim()
+    // check("_loanId", "_loanId is Required").not().isEmpty().trim(),
+];
 const userEditVaildate = [
     check("N", "Name is Required").not().isEmpty().trim(),
     check("R", "Role is Required").not().isEmpty().trim(),
@@ -104,5 +108,6 @@ module.exports = {
     adminAddVaildate,
     loginVaildate,
     createLoanVaildate,
+    createContactVaildate,
     fnMaintenancesCheck
 }

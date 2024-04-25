@@ -14,24 +14,25 @@ router.get('/data', allinOneController.fnTestApp);
 router.post('/encrypt', allinOneController.fnEncryptTest);
 router.post('/decrypt', allinOneController.fnDecryptTest);
 //Admin Routes
-router.post('/addAdmin', [validate.adminAddVaildate, validate.vaildator], allinOneController.fnAddAdmin);
-router.post('/login', [validate.loginVaildate, validate.vaildator], allinOneController.fnLogin);
+router.post('/addAdmin', [validate.fnDecryptBody, validate.adminAddVaildate, validate.vaildator], allinOneController.fnAddAdmin);
+router.post('/login', [validate.fnDecryptBody, validate.loginVaildate, validate.vaildator], allinOneController.fnLogin);
 //Dashboard
 router.get('/dashboard', validate.fnAuthenticateToken, ((req, res) => {
     res.send("Dashboard");
 }));
 //User Routes
-router.post('/addUser', [validate.userAddVaildate, validate.fnAuthenticateToken, validate.vaildator], allinOneController.fnAddUser);
-router.post('/editUser', validate.fnAuthenticateToken, allinOneController.fnEditUser);
+router.post('/addUser', [validate.fnDecryptBody, validate.userAddVaildate, validate.fnAuthenticateToken, validate.vaildator], allinOneController.fnAddUser);
+router.post('/editUser', validate.fnDecryptBody, validate.fnAuthenticateToken, allinOneController.fnEditUser);
 router.get('/getUser', validate.fnAuthenticateToken, allinOneController.fnGetUser);
 router.get('/getAllUsers', validate.fnAuthenticateToken, allinOneController.fnGetAllUsers);
 
 //Loan Routes 
-router.post('/createLoan', [validate.createLoanVaildate, validate.fnAuthenticateToken, validate.vaildator], allinOneController.fnCreateLoan);
+router.post('/createLoan', validate.fnDecryptBody, [validate.createLoanVaildate, validate.fnAuthenticateToken, validate.vaildator], allinOneController.fnCreateLoan);
+router.post('/createContact', validate.fnDecryptBody, [validate.createContactVaildate, validate.fnAuthenticateToken, validate.vaildator], allinOneController.fnCreateContact);
 router.get('/getLoan', validate.fnAuthenticateToken, allinOneController.fnGetLoan);
 
 // Email
 router.get('/sendOTP', validate.fnAuthenticateToken, allinOneController.fnSendOTP);
-router.post('/verifyOTP', validate.fnAuthenticateToken, allinOneController.fnVerifyOTP);
+router.post('/verifyOTP', validate.fnDecryptBody, validate.fnAuthenticateToken, allinOneController.fnVerifyOTP);
 
 module.exports = router

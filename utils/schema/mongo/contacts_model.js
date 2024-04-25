@@ -7,8 +7,11 @@
 const mongoose = require('mongoose');
 
 const contactDetailsSchema = new mongoose.Schema({
-    CT: { type: String, required: true },       // Contact Type (e.g., Customer, Vendor, Supplier, etc.)
-    R: { type: Number, required: true },        // Recipient (e.g., Name of the contact)
+    BID: { type: Number, required: true },          // Business ID
+    AID: { type: String, required: true },          // Agreement Id
+    CT: { type: String, required: true },           // Contact Type (e.g., Customer, Vendor, Supplier, etc.)
+    RT: { type: Number, required: true },           // Recipient Type(e.g to,cc,bcc)
+    CE: { type: String, required: true, trim: true },                       // Contant Email
     CN: { type: String, required: true, trim: true },                       // Company Name
     PN: { type: String, required: true, trim: true },                       // Person Name
     D: { type: String, required: true, trim: true },                        // Designation
@@ -36,12 +39,14 @@ module.exports = mongoose.model('contact_model', contactDetailsSchema);
  * 
  * 
  * |4|**Contact Details**||
+ *  BID-Business ID
+ *  AID-Agreement Id
  *  CT-Contact Type
- *  R-Recipient
+ *  RT-Recipient Type
  *      1-to
  *      2-cc
  *      3-bcc
- *  E-Email
+ *  CE-Contant Email
  *  CN-Company Name
  *  PN-Person Name
  *  D-Designation

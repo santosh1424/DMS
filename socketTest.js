@@ -5,9 +5,8 @@ const io = require('socket.io-client');
 // Specify the URL of your Socket.IO server
 // const socket = io('http://192.168.1.9:3000'); // Update with your server URL and port
 const socket = io('http://192.168.1.9:3000', {
-    auth: {
-        token: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJFIjoic2FudG9zaGR1YmV5LmNvZGl1bUBnbWFpbC5jb20iLCJOIjoic2FudG9zaCIsIkJJRCI6ODkxNDksIlMiOjEsImlhdCI6MTcxMzI0OTE0NH0.daR1yimvU1_tq-27ynCtQqcsHYznNiKqrEEEW_5tEFE",
-        _userid:'6617b07c2bb961ce721dc7a5'
+    query: {
+        data: "U2FsdGVkX1/o+77Af32tGpUDiFujpg9yQLsduYFzcPLdThZYGquOu6/rcvSFEeLlAP1cHT1xmVFZI2qVp2uHisAZiB8g5hQRUX+jIKv0IPRSnsxxbCRO2dlcoZP8TGibyv0Kyw5X37bTsySL8dSOC1vWrNf5BV3PHA+eWjkdkelqsS04ARMQyuh9Bb5k7udISkZ0ru5xR3w2vRXCCGmH1qwZIRqer4g2246NPeJRpLkk2P+XIr6L/uuxfwRl2k/IlGg7jxpkAZsUlBIV7aifdZsQG4wFXrq72kqccIFrYJJlFr6AUn08U59TMdrD1ha8hQY8XO4y+hQnh5GfbWHaRr7Tv30ia5+QY9JvXu4ctMk="
     },
 });
 // Event handler for connecting to the server

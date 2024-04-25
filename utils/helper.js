@@ -6,8 +6,8 @@
  */
 const _ = require('lodash');
 
-const fnStringlyJSON = (data) => JSON.stringify(data);
-const fnParseJSON = (data) => _fnRecuringJSONPrase(data);
+const fnStringlyJSON = async (data) => await JSON.stringify(data);
+const fnParseJSON = async (data) => await _fnRecuringJSONPrase(data);
 
 const fnGracefulRestart = (err = "") => {
     logger.warn("Graceful Restart: ", err);
@@ -22,10 +22,10 @@ module.exports = {
     fnRandomNumber
 }
 
-const _fnRecuringJSONPrase = (data) => {
+const _fnRecuringJSONPrase = async (data) => {
     try {
-        if (typeof (data) == 'string') return _fnRecuringJSONPrase(JSON.parse(data))
-        else if (typeof (data) == 'object') return data;
+        if (typeof (data) == 'string') return await _fnRecuringJSONPrase(JSON.parse(data))
+        else if (typeof (data) == 'object') return await data;
     } catch (error) {
         return false;
     }

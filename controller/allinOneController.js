@@ -19,7 +19,7 @@ const redisSchema = require('../utils/schema/redis/model/allinOne_schema')
 const bcrypt = require('bcryptjs')
 const jwt = require('jsonwebtoken');
 const nodeMailer = require("nodemailer");
-
+const ObjectId = require('mongoose').Types.ObjectId;
 const fnTestApp = (req, res) => {
     try {
         const message = 'This is MessagE'
@@ -46,7 +46,7 @@ const fnEncryptTest = async (req, res) => {
 const fnDecryptTest = async (req, res) => {
     try {
         const data = await aes.fnDecryptAES(req.body.data);
-        return res.status(200).json({ data });
+        return res.status(200).jsonp(data);
     } catch (err) {
         logger.warn('fnDecryptTest', err)
         return httpResponse.fnBadRequest(res);
@@ -82,28 +82,29 @@ const fnAddAdmin = async (req, res) => {
 //Login for any Users in DMS
 const fnLogin = async (req, res) => {
     try {
-        req.body = helper.fnParseJSON(req.body) || null;
+        req.body = await helper.fnParseJSON(req.body) || null;
         const user = await mongoOps.fnFindOne(userSchema, { E: req.body.E }, { __v: 0 });
         if (!user) return httpResponse.fnUnauthorized(res);
         const isPasswordValid = await bcrypt.compare(req.body.P, user.P);
 
-        if (!isPasswordValid) return httpResponse.fnPreConitionFailed(res);
-        else if (user.S > 2) return httpResponse.fnConflict(res);
+        if (!isPasswordValid) return httpResponse.fnPreConditionFailed(res);
+        else if (user.S != 2) return httpResponse.fnConflict(res);
         //Create a new TKN
-        const token = await jwt.sign({
+        const TKN = await jwt.sign({
             E: user.E,
             N: user.N,
             BID: user.BID,
             S: user.S || 0,
+            _userId: user._id
         }, constants.SECRET_KEY);
 
         //Update TKN in MongoDB
-        const updateUserTKN = await mongoOps.fnFindOneAndUpdate(userSchema, { E: user.E, BID: user.BID, }, { TKN: token }, { new: true, lean: true, projection: { P: 0, __v: 0 } });
+        const updateUserTKN = await mongoOps.fnFindOneAndUpdate(userSchema, { BID: user.BID, E: user.E, }, { TKN }, { new: true, lean: true, projection: { P: 0, __v: 0 } });
         //Add user in redis
         await redisClient.hmset(redisKeys.fnUserKey(user.BID, user._id), await redisSchema.fnSetUserSchema(updateUserTKN));
+        const data = { TKN }
         //Encryption
-        const data = await aes.fnEncryptAES({ token, _userId: updateUserTKN._id })
-        return httpResponse.fnSuccess(res, data);
+        return httpResponse.fnSuccess(res, await aes.fnEncryptAES(data));
     } catch (error) {
         logger.warn('fnLoginAdmin', error)
         return httpResponse.fnBadRequest(res);
@@ -115,10 +116,10 @@ const fnLogin = async (req, res) => {
 const fnAddUser = async (req, res) => {
     try {
         if (!req.currentUserData || !Object.keys(req.currentUserData).length === 0) return httpResponse.fnUnauthorized(res);
-        req.body = helper.fnParseJSON(req.body) || null
+        req.body = await helper.fnParseJSON(req.body) || null
         const hashedPassword = await bcrypt.hash(req.body.P, 10);
         const BID = parseInt(req.currentUserData.BID) || 0;//UUID
-        if (!BID) return httpResponse.fnPreConitionFailed(res);
+        if (!BID) return httpResponse.fnPreConditionFailed(res);
 
         //Update Total User
         const admin = await mongoOps.fnFindOneAndUpdate(adminSchema, { BID, E: req.currentUserData.E }, { $inc: { TU: 1 } });
@@ -129,7 +130,7 @@ const fnAddUser = async (req, res) => {
         req.body.BID = BID;//Add BID
 
         // Add User
-        const addedUser = await mongoOps.fnFindOneAndUpdate(userSchema, { E: req.body.E, N: req.body.N, BID }, { ...req.body }, { new: true, upsert: true, lean: true })
+        const addedUser = await mongoOps.fnFindOneAndUpdate(userSchema, { BID, E: req.body.E, N: req.body.N }, { ...req.body }, { new: true, upsert: true, lean: true })
         await redisClient.sadd(redisKeys.fnAddUserKey(BID, _adminId), addedUser._id)
 
         return httpResponse.fnSuccess(res);
@@ -169,9 +170,8 @@ const fnGetUser = async (req, res) => {
         if (!req.currentUserData || !Object.keys(req.currentUserData).length === 0) return httpResponse.fnUnauthorized(res);
         const _userId = ObjectID(req.query._id) || null;
         if (!_userId) return httpResponse.fnUnauthorized(res);
-        const user = await mongoOps.fnFindOne(userSchema, { _id: _userId, BID: req.currentUserData.BID });
-        if (!user) return httpResponse.fnPreConitionFailed(res);
-        return httpResponse.fnSuccess(res, user);
+        const data = await aes.fnEncryptAES(await mongoOps.fnFindOne(userSchema, { BID: req.currentUserData.BID, _id: _userId, }));
+        return httpResponse.fnSuccess(res, data);
     } catch (error) {
         logger.warn('fnGetUser', error);
         if (error.code === 11000) return httpResponse.fnConflict(res);//MongoDB DuplicateKey error  
@@ -198,7 +198,7 @@ const fnGetAllUsers = async (req, res) => {
 const fnSendOTP = async (req, res) => {
     try {
         if (!req.currentUserData || !Object.keys(req.currentUserData).length === 0) return httpResponse.fnUnauthorized(res);
-        if (parseInt(req.currentUserData.S) == 1) return httpResponse.fnConflict(res);
+        if (parseInt(req.currentUserData.S) == 2) return httpResponse.fnPreConditionFailed(res);
         const email = req.currentUserData.E;
         const otp = helper.fnRandomNumber(1000, 9999); // Generate a 6-digit OTP
         const otpKey = await redisKeys.fnOTPKey(req.currentUserData.BID, email)
@@ -222,7 +222,7 @@ const fnSendOTP = async (req, res) => {
             <p>Thank you!</p>`,
         });
         logger.debug('Sending...Email', email, otp);
-        return httpResponse.fnSuccess(res, 'OTP sent successfully');
+        return httpResponse.fnSuccess(res);
     } catch (error) {
         logger.warn('fnSendOTP', error);
         return httpResponse.fnBadRequest(res);
@@ -235,6 +235,7 @@ const fnVerifyOTP = async (req, res) => {
         if (!req.currentUserData || !Object.keys(req.currentUserData).length === 0) return httpResponse.fnUnauthorized(res);
         const otp = req.body.otp;
         const email = req.currentUserData.E;
+        const _userId = req.currentUserData._userId;
         const BID = parseInt(req.currentUserData.BID);
         const otpKey = await redisKeys.fnOTPKey(req.currentUserData.BID, email)
         // const existingOTP = await mongoOps.fnFindOneAndDelete(otpSchema, { E: email, otp });
@@ -248,13 +249,15 @@ const fnVerifyOTP = async (req, res) => {
                 N: req.currentUserData.N,
                 BID,
                 S: 2,
+                _userId
             }, constants.SECRET_KEY);
             //User Status and TKN
             const updateUserTKN = await mongoOps.fnFindOneAndUpdate(userSchema, { E: email }, { S: 2, TKN });
             await redisClient.hmset(redisKeys.fnUserKey(BID, updateUserTKN._id), await redisSchema.fnSetUserSchema(updateUserTKN));
-            return httpResponse.fnSuccess(res, token);
-
-        } else return httpResponse.fnPreConitionFailed(res);// OTP is Invalid
+            const data = await aes.fnEncryptAES(TKN);
+            logger.debug("||Verified||", email, _userId)
+            return httpResponse.fnSuccess(res, data);
+        } else return httpResponse.fnPreConditionFailed(res);// OTP is Invalid
     } catch (error) {
         logger.warn('fnVerifyOTP ', error);
         return httpResponse.fnBadRequest(res);
@@ -266,14 +269,12 @@ const fnCreateLoan = async (req, res) => {
     try {
 
         if (!req.currentUserData || !Object.keys(req.currentUserData).length === 0) return httpResponse.fnUnauthorized(res);
-        req.body = helper.fnParseJSON(req.body);
-        if (!req.body || !Object.keys(req.body).length === 0) return httpResponse.fnPreConitionFailed(res);
         const BID = parseInt(req.currentUserData.BID);
         const option = { new: true, lean: true, upsert: true };
         // if (req.query.type == 'add') option.upsert = true;
 
         //Update Total User : loanSchema ,contactsSchema
-        const createLoan = await mongoOps.fnFindOneAndUpdate(loanSchema, { AID: req.body.AID, BID }, { ...req.body }, option)
+        const createLoan = await mongoOps.fnFindOneAndUpdate(loanSchema, { BID, AID: req.body.AID }, { ...req.body }, option)
         await redisClient.hmset(redisKeys.fnLoanKey(BID, createLoan._id), await redisSchema.fnSetLoanSchema(createLoan));
         return httpResponse.fnSuccess(res, { _loanId: createLoan._id });
 
@@ -305,6 +306,32 @@ const fnGetLoan = async (req, res) => {
 
     }
 };
+
+//Create Contacts
+const fnCreateContact = async (req, res) => {
+    try {
+        if (!req.currentUserData || !Object.keys(req.currentUserData).length === 0) return httpResponse.fnUnauthorized(res);
+        const BID = parseInt(req.currentUserData.BID);
+        req.body.BID = parseInt(req.currentUserData.BID);
+        const option = { new: true, lean: true, upsert: true };
+        // if (req.query.type == 'add') option.upsert = true;
+        //Update Total User : loanSchema ,contactsSchema
+
+        const getLoan = await mongoOps.fnFindOne(loanSchema, { _id: new ObjectId(req.body._loanId) })
+        logger.debug(getLoan, req.body)
+        if (getLoan && Object.keys(getLoan).length > 0) {
+            const createContact = await mongoOps.fnFindOneAndUpdate(contactsSchema, { BID, AID: req.body.AID }, { ...req.body }, option)
+            return httpResponse.fnSuccess(res, { _contactId: createContact._id });
+        } else return httpResponse.fnConflict(res);
+        // await redisClient.hmset(redisKeys.fnLoanKey(BID, createLoan._id), await redisSchema.fnSetLoanSchema(createLoan));
+
+    } catch (error) {
+        logger.warn('fnCreateContact', error)
+        if (error.code === 11000) return httpResponse.fnConflict(res);//MongoDB DuplicateKey error
+        else return httpResponse.fnBadRequest(res);
+
+    }
+};
 module.exports = {
     fnTestApp,
     fnEncryptTest,
@@ -318,6 +345,7 @@ module.exports = {
     fnGetUser,
     fnGetAllUsers,
     fnCreateLoan,
+    fnCreateContact,
     fnGetLoan
 }
 
