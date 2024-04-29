@@ -23,7 +23,6 @@ const adminSchema = new mongoose.Schema({
         required: true,
         trim: true
     },
-
     TU: {
         type: Number,
         required: true,
@@ -48,13 +47,13 @@ const adminSchema = new mongoose.Schema({
 });
 
 // Custom function to generate a unique random number for BID
-adminSchema.pre('save', function (next) {
+adminSchema.pre('save', async function (next) {
     const maxTry = 3;
     let totalTry = 0;
 
     while (totalTry < maxTry) {
         const randomNumber = generateUniqueBid()
-        const existingAdmin = this.constructor.findOne({ BID: randomNumber });
+        const existingAdmin = await this.constructor.findOne({ BID: randomNumber });
         if (!existingAdmin) {
             this.BID = randomNumber;
             return next();

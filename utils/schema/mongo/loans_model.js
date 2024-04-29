@@ -8,54 +8,79 @@ const mongoose = require('mongoose');
 
 const loanSchema = new mongoose.Schema({
     BID: { type: Number, required: true }, // Business ID
-    AID: { type: String, required: true, unique: true, trim: true }, // Agreement Id
-    Z: { type: String, required: true }, // Zone (Drop Down)
-    CN: { type: String, required: true, trim: true }, // Company Name
-    PN: { type: String, required: true, trim: true }, // PAN Number
-    GN: { type: String, required: true, trim: true }, // Group Name
-    GST: { type: String, required: true, trim: true }, // GST Number
-    CIN: { type: String, required: true, trim: true }, // CIN Number
-    I: { type: String, required: true, trim: true }, // Industry (Drop Down)
-    SA: { type: Number, required: true, trim: true }, // Sanctioned Amount
-    HA: { type: Number, required: true, trim: true }, // Hold Amount
-    // DA: { type: Number, required: true }, // Downsell Amount
-    DD: { type: Date, required: true }, // Downsell Date
-    PS: { type: String, required: true }, // Project Status (Drop Down)
-    OA: { type: Number, required: true }, // Outstanding Amount
-    T: { type: String, required: true }, // Loan Type (Drop Down)
-    P: { type: String, required: true }, // Loan Product (Drop Down)
-    ST: { type: String, required: true }, // Secured/Unsecured (Drop Down)
-    SD: { type: Date, required: true }, // Sanctioned Date
-    CD: { type: Date, required: true }, // Loan Closure Date
-    RED: { type: Date, required: true }, // Repayment End Date
-    DSRA: [{
-        A: { type: String, required: true }, // DSRA Applicability
-        F: { type: String, required: true }, // DSRA Form
-        S: { type: String, required: true }, // DSRA Status
-        V: { type: Number, required: true } // DSRA Amount
-    }],
+    AID: {
+        type: String, required: true,
+        unique: true, trim: true,
+        default: generateUniqueAID,
 
-    S: { type: Number, required: true },//Share(%)
-    DV: { type: Date, required: true },//Date of Valuation
-    STV: [{
-        T: { type: Number, required: true },//Security Type 
-        V: { type: Number, required: true }//Security Value
-    }],
+    }, // Agreement Id
+    Z: { type: String, }, // Zone (Drop Down)
+    CN: { type: String, trim: true }, // Company Name
+    PN: { type: String, trim: true }, // PAN Number
+    GN: { type: String, trim: true }, // Group Name
+    GST: { type: String, trim: true }, // GST Number
+    CIN: { type: String, trim: true }, // CIN Number
+    I: { type: String, trim: true }, // Industry (Drop Down)
+    SA: { type: Number, trim: true }, // Sanctioned Amount
+    HA: { type: Number, trim: true }, // Hold Amount
+    // DA: { type: Number,  }, // Downsell Amount
+    DD: { type: Date }, // Downsell Date
+    PS: { type: String }, // Project Status (Drop Down)
+    OA: { type: Number }, // Outstanding Amount
+    T: { type: String }, // Loan Type (Drop Down)
+    P: { type: String }, // Loan Product (Drop Down)
+    ST: { type: String }, // Secured/Unsecured (Drop Down)
+    SD: { type: Date }, // Sanctioned Date
+    CD: { type: Date }, // Loan Closure Date
+    RED: { type: Date }, // Repayment End Date
+    DSRA: {
+        A: { type: String }, // DSRA Applicability
+        F: { type: String }, // DSRA Form
+        S: { type: String }, // DSRA Status
+        V: { type: Number } // DSRA Amount
+    },
 
-    AN: { type: String, required: true },      // Account Name
-    BAN: { type: String, required: true },     // Bank Account Number
-    AT: { type: Number, required: true },      // Account type                                    // Account Type
-    LB: { type: String, required: true },      // Location of Branch
-    BN: { type: String, required: true },      // Bank Name
-    BA: { type: String, required: true },      // Branch Address
+    S: { type: Number, },//Share(%)
+    DV: { type: Date, },//Date of Valuation
+    STV: {
+        T: { type: Number },//Security Type 
+        V: { type: Number }//Security Value
+    },
+
+    AN: { type: String },      // Account Name
+    BAN: { type: String },     // Bank Account Number
+    AT: { type: Number },      // Account type                                    // Account Type
+    LB: { type: String },      // Location of Branch
+    BN: { type: String },      // Bank Name
+    BA: { type: String },      // Branch Address
     IFSC: {
         type: String,
-        required: true,
         uppercase: true,
         match: /^[A-Z]{4}\d{7}$/                // IFSC format validation (4 letters followed by 7 digits)
     }                                           // Indian Financial System Code
 });
+// Custom function to generate a unique random number for BID
+loanSchema.pre('save', async function (next) {
+    const maxTry = 3;
+    let totalTry = 0;
 
+    while (totalTry < maxTry) {
+        const randomNumber = generateUniqueAID()
+        const existingAID = await this.constructor.findOne({ AID: randomNumber });
+        if (!existingAID) {
+            this.AID = randomNumber;
+            return next();
+        }
+        totalTry++;
+    }
+    // Throw an error if the maximum number of attempts is reached
+    const error = new Error(`Failed to generate a unique random number for AID after ${maxTry} attempts.`);
+    return next(error);
+});
+
+function generateUniqueAID() {
+    return helper.fnRandomAlphaNumeric(9);//length 0-8
+}
 
 module.exports = mongoose.model('loan_model', loanSchema);
 

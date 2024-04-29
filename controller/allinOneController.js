@@ -20,6 +20,7 @@ const bcrypt = require('bcryptjs')
 const jwt = require('jsonwebtoken');
 const nodeMailer = require("nodemailer");
 const ObjectId = require('mongoose').Types.ObjectId;
+
 const fnTestApp = (req, res) => {
     try {
         const message = 'This is MessagE'
@@ -32,6 +33,7 @@ const fnTestApp = (req, res) => {
     }
 
 }
+
 const fnEncryptTest = async (req, res) => {
     try {
         const data = await aes.fnEncryptAES(req.body.data);
@@ -53,7 +55,7 @@ const fnDecryptTest = async (req, res) => {
     }
 }
 
-//Adding SuperUser in DMS
+//Adding SuperUser 
 const fnAddAdmin = async (req, res) => {
     try {
         req.body = helper.fnParseJSON(req.body) || null;
@@ -79,7 +81,7 @@ const fnAddAdmin = async (req, res) => {
     }
 };
 
-//Login for any Users in DMS
+//Login for any Users 
 const fnLogin = async (req, res) => {
     try {
         req.body = await helper.fnParseJSON(req.body) || null;
@@ -112,7 +114,7 @@ const fnLogin = async (req, res) => {
 
 }
 
-//Adding BasicUser in DMS
+//Adding BasicUser 
 const fnAddUser = async (req, res) => {
     try {
         if (!req.currentUserData || !Object.keys(req.currentUserData).length === 0) return httpResponse.fnUnauthorized(res);
@@ -142,7 +144,7 @@ const fnAddUser = async (req, res) => {
     }
 };
 
-//Edit BasicUser in DMS
+//Edit BasicUser 
 const fnEditUser = async (req, res) => {
     try {
         if (!req.currentUserData || !Object.keys(req.currentUserData).length === 0) return httpResponse.fnUnauthorized(res);
@@ -164,13 +166,14 @@ const fnEditUser = async (req, res) => {
 
 }
 
-//Get BasicUser in DMS
+//Get BasicUser 
 const fnGetUser = async (req, res) => {
     try {
         if (!req.currentUserData || !Object.keys(req.currentUserData).length === 0) return httpResponse.fnUnauthorized(res);
-        const _userId = ObjectID(req.query._id) || null;
-        if (!_userId) return httpResponse.fnUnauthorized(res);
-        const data = await aes.fnEncryptAES(await mongoOps.fnFindOne(userSchema, { BID: req.currentUserData.BID, _id: _userId, }));
+        const _id = req.query._id || null;
+        const BID = parseInt(req.currentUserData.BID) || 0;
+        if (!ObjectId.isValid(_id) || !BID) return httpResponse.fnPreConditionFailed(res);
+        const data = await aes.fnEncryptAES(await mongoOps.fnFindOne(userSchema, { BID, _id: new ObjectId(_id), }));
         return httpResponse.fnSuccess(res, data);
     } catch (error) {
         logger.warn('fnGetUser', error);
@@ -179,8 +182,9 @@ const fnGetUser = async (req, res) => {
     }
 
 }
-//Get ALL BasicUser in DMS
-const fnGetAllUsers = async (req, res) => {
+
+//list ALL BasicUser 
+const fnListUser = async (req, res) => {
     try {
         if (!req.currentUserData || !Object.keys(req.currentUserData).length === 0) return httpResponse.fnUnauthorized(res);
         const BID = parseInt(req.currentUserData.BID) || 0;
@@ -188,7 +192,7 @@ const fnGetAllUsers = async (req, res) => {
         const data = await aes.fnEncryptAES(await mongoOps.fnFind(userSchema, { BID }, { __v: 0, P: 0 }))
         return httpResponse.fnSuccess(res, data);
     } catch (error) {
-        logger.warn('fnGetAllUsers', error);
+        logger.warn('fnListUser', error);
         if (error.code === 11000) return httpResponse.fnConflict(res);//MongoDB DuplicateKey error  
         else return httpResponse.fnBadRequest(res);
     }
@@ -264,20 +268,48 @@ const fnVerifyOTP = async (req, res) => {
     }
 };
 
+//Create Agreement Id
+const fnCreateAID = async (req, res) => {
+    try {
+        if (!req.currentUserData || !Object.keys(req.currentUserData).length === 0) return httpResponse.fnUnauthorized(res);
+        const BID = parseInt(req.currentUserData.BID);
+        const AID = req.body.AID || null;
+
+        if (AID) {// Creation of AID with User inputs
+            const getAID = await mongoOps.fnFindOne(loanSchema, { AID })
+            if (!getAID) {
+                const loan = await mongoOps.fnFindOneAndUpdate(loanSchema, { BID, AID }, { AID }, { new: true, lean: true, upsert: true })
+                const data = await aes.fnEncryptAES({ AID: loan.AID, _loanId: loan._id });
+                return httpResponse.fnSuccess(res, data);
+            }
+            else return httpResponse.fnConflict(res); //AID already Exist
+
+        } else {//Automatic Creation of AID
+            const loan = await mongoOps.fnInsertOne(loanSchema, { BID })//await mongoOps.fnFindOneAndUpdate(contactsSchema, { BID }, {}, { new: true, lean: true, upsert: true })
+            const data = await aes.fnEncryptAES({ AID: loan.AID, _loanId: loan._id });
+            return httpResponse.fnSuccess(res, data);
+        }
+
+    } catch (error) {
+        logger.warn('fnCreateAID', error)
+        if (error.code === 11000) return httpResponse.fnConflict(res);//MongoDB DuplicateKey error
+        else return httpResponse.fnBadRequest(res);
+
+    }
+};
+
 //Create Loan
 const fnCreateLoan = async (req, res) => {
     try {
-
         if (!req.currentUserData || !Object.keys(req.currentUserData).length === 0) return httpResponse.fnUnauthorized(res);
-        const BID = parseInt(req.currentUserData.BID);
-        const option = { new: true, lean: true, upsert: true };
-        // if (req.query.type == 'add') option.upsert = true;
-
-        //Update Total User : loanSchema ,contactsSchema
-        const createLoan = await mongoOps.fnFindOneAndUpdate(loanSchema, { BID, AID: req.body.AID }, { ...req.body }, option)
-        await redisClient.hmset(redisKeys.fnLoanKey(BID, createLoan._id), await redisSchema.fnSetLoanSchema(createLoan));
-        return httpResponse.fnSuccess(res, { _loanId: createLoan._id });
-
+        const BID = parseInt(req.currentUserData.BID) || 0;
+        const _loanId = req.body._loanId || null;
+        if (!ObjectId.isValid(_loanId) || !BID) return httpResponse.fnConflict(res);
+        const loan = await mongoOps.fnFindOneAndUpdate(loanSchema, { BID, AID: req.body.AID, _id: new ObjectId(_loanId) }, { ...req.body }, { new: true, lean: true })
+        if (!loan) return httpResponse.fnConflict(res);
+        logger.debug('Loan Created....', BID, _loanId);
+        await redisClient.hmset(redisKeys.fnLoanKey(BID, _loanId), await redisSchema.fnSetLoanSchema(loan));
+        return httpResponse.fnSuccess(res);
     } catch (error) {
         logger.warn('fnCreateLoan', error)
         if (error.code === 11000) return httpResponse.fnConflict(res);//MongoDB DuplicateKey error
@@ -286,52 +318,126 @@ const fnCreateLoan = async (req, res) => {
     }
 };
 
+//Listing All Loans in Current Bussiness
+const fnListLoan = async (req, res) => {
+    try {
+        if (!req.currentUserData || !Object.keys(req.currentUserData).length === 0) return httpResponse.fnUnauthorized(res);
+        const BID = parseInt(req.currentUserData.BID) || 0;
+        const data = await aes.fnEncryptAES(await mongoOps.fnFind(loanSchema, { BID }));
+        return httpResponse.fnSuccess(res, data);
+    } catch (error) {
+        logger.warn('fnListLoan', error)
+        if (error.code === 11000) return httpResponse.fnConflict(res);//MongoDB DuplicateKey error
+        else return httpResponse.fnBadRequest(res);
+
+    }
+};
+
+//Get Loan 
 const fnGetLoan = async (req, res) => {
     try {
-
         if (!req.currentUserData || !Object.keys(req.currentUserData).length === 0) return httpResponse.fnUnauthorized(res);
-        const BID = parseInt(req.currentUserData.BID);
-        //Update Total User 
-        // loanSchema
-        // contactsSchemaallLoan
-        const allLoan = await mongoOps.fnFind(loanSchema, { BID })
-
-        //await redisClient.hmset(redisKeys.fnLoanKey(BID, createLoan._id), await redisSchema.fnSetLoanSchema(createLoan));
-        return httpResponse.fnSuccess(res, { allLoan });
-
+        const _id = req.query._loanId || null;
+        const BID = parseInt(req.currentUserData.BID) || 0;
+        if (!ObjectId.isValid(_id) || !BID) return httpResponse.fnPreConditionFailed(res);
+        const data = await aes.fnEncryptAES(await mongoOps.fnFindOne(loanSchema, { BID, _id: new ObjectId(_id) }));
+        return httpResponse.fnSuccess(res, data);
     } catch (error) {
-        logger.warn('fnCreateLoan', error)
-        if (error.code === 11000) return httpResponse.fnConflict(res);//MongoDB DuplicateKey error
+        logger.warn('fnGetLoan', error);
+        if (error.code === 11000) return httpResponse.fnConflict(res);//MongoDB DuplicateKey error  
         else return httpResponse.fnBadRequest(res);
-
     }
-};
+
+}
 
 //Create Contacts
 const fnCreateContact = async (req, res) => {
     try {
         if (!req.currentUserData || !Object.keys(req.currentUserData).length === 0) return httpResponse.fnUnauthorized(res);
-        const BID = parseInt(req.currentUserData.BID);
-        req.body.BID = parseInt(req.currentUserData.BID);
-        const option = { new: true, lean: true, upsert: true };
-        // if (req.query.type == 'add') option.upsert = true;
-        //Update Total User : loanSchema ,contactsSchema
+        const BID = parseInt(req.currentUserData.BID) || 0;
+        const _loanId = req.body._loanId || null;
+        const _contactId = req.body._contactId || null;
+        const type = req.query.type || null;
+        // req.body=helper.fnParseJSON(req.body)
+        if (!ObjectId.isValid(_loanId) || !BID) return httpResponse.fnConflict(res);
+        const loan = await mongoOps.fnFindOne(loanSchema, { _id: new ObjectId(_loanId) })
+        if (loan) {
+            let option, query;
 
-        const getLoan = await mongoOps.fnFindOne(loanSchema, { _id: new ObjectId(req.body._loanId) })
-        logger.debug(getLoan, req.body)
-        if (getLoan && Object.keys(getLoan).length > 0) {
-            const createContact = await mongoOps.fnFindOneAndUpdate(contactsSchema, { BID, AID: req.body.AID }, { ...req.body }, option)
-            return httpResponse.fnSuccess(res, { _contactId: createContact._id });
+            if (type == 'EDIT') {
+                option = { new: true, lean: true };
+                query = { BID, _id: new ObjectId(_contactId) };
+                delete req.body.CE;
+            } else {
+                query = { BID, _loanId: new ObjectId(_loanId), CE: req.body.CE };
+                option = { new: true, lean: true, upsert: true };
+            }
+
+            const contact = await mongoOps.fnFindOneAndUpdate(contactsSchema, query, { ...req.body }, option);
+            //Only for Edit
+            if (type == 'EDIT' && !contact) return httpResponse.fnConflict(res);
+
+            const data = await aes.fnEncryptAES({ _contactId: contact._id });
+            return httpResponse.fnSuccess(res, data);
         } else return httpResponse.fnConflict(res);
-        // await redisClient.hmset(redisKeys.fnLoanKey(BID, createLoan._id), await redisSchema.fnSetLoanSchema(createLoan));
-
     } catch (error) {
-        logger.warn('fnCreateContact', error)
+        logger.warn('fnCreateContact', error);
         if (error.code === 11000) return httpResponse.fnConflict(res);//MongoDB DuplicateKey error
         else return httpResponse.fnBadRequest(res);
-
     }
 };
+
+//Get ALL Contacts
+const fnListContact = async (req, res) => {
+    try {
+        if (!req.currentUserData || !Object.keys(req.currentUserData).length === 0) return httpResponse.fnUnauthorized(res);
+        const BID = parseInt(req.currentUserData.BID) || 0;
+        if (!BID) return httpResponse.fnPreConditionFailed(res);
+        const contacts = await mongoOps.fnFind(contactsSchema, { BID, _loanId: new ObjectId(req.query._loanId) }, { __v: 0, })
+        //Encryption
+        const data = await aes.fnEncryptAES(contacts)
+        return httpResponse.fnSuccess(res, data);
+    } catch (error) {
+        logger.warn('fnListContact', error);
+        if (error.code === 11000) return httpResponse.fnConflict(res);//MongoDB DuplicateKey error  
+        else return httpResponse.fnBadRequest(res);
+    }
+
+}
+
+//View Single Contact 
+const fnGetContact = async (req, res) => {
+    try {
+        if (!req.currentUserData || !Object.keys(req.currentUserData).length === 0) return httpResponse.fnUnauthorized(res);
+        const _id = req.query._id || null;
+        const BID = parseInt(req.currentUserData.BID) || 0;
+        if (!ObjectId.isValid(_id) || !BID) return httpResponse.fnPreConditionFailed(res);
+        const data = await aes.fnEncryptAES(await mongoOps.fnFindOne(contactsSchema, { BID, _id: new ObjectId(req.query._id) }));
+        return httpResponse.fnSuccess(res, data);
+    } catch (error) {
+        logger.warn('fnGetContact', error);
+        if (error.code === 11000) return httpResponse.fnConflict(res);//MongoDB DuplicateKey error  
+        else return httpResponse.fnBadRequest(res);
+    }
+}
+
+//Delete Single Contact 
+const fnDeleteContact = async (req, res) => {
+    try {
+        if (!req.currentUserData || !Object.keys(req.currentUserData).length === 0) return httpResponse.fnUnauthorized(res);
+        const _id = req.query._id || null;
+        const BID = parseInt(req.currentUserData.BID) || 0;
+        if (!ObjectId.isValid(_id) || !BID) return httpResponse.fnPreConditionFailed(res);
+        logger.debug('Deleteing.....Contact', BID, new ObjectId(req.query._id))
+        const data = await aes.fnEncryptAES(await mongoOps.fnDeleteOne(contactsSchema, { BID, _id: new ObjectId(req.query._id) }));
+        return httpResponse.fnSuccess(res, data);
+    } catch (error) {
+        logger.warn('fnDeleteContact', error);
+        if (error.code === 11000) return httpResponse.fnConflict(res);//MongoDB DuplicateKey error  
+        else return httpResponse.fnBadRequest(res);
+    }
+}
+
 module.exports = {
     fnTestApp,
     fnEncryptTest,
@@ -343,10 +449,15 @@ module.exports = {
     fnSendOTP,
     fnVerifyOTP,
     fnGetUser,
-    fnGetAllUsers,
+    fnGetContact,
+    fnDeleteContact,
+    fnListUser,
     fnCreateLoan,
     fnCreateContact,
-    fnGetLoan
+    fnListContact,
+    fnGetLoan,
+    fnCreateAID,
+    fnListLoan
 }
 
 const _sendEmail = async (options) => {
