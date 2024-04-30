@@ -58,6 +58,8 @@ const loanSchema = new mongoose.Schema({
         uppercase: true,
         match: /^[A-Z]{4}\d{7}$/                // IFSC format validation (4 letters followed by 7 digits)
     }                                           // Indian Financial System Code
+}, {
+    timestamps: true
 });
 // Custom function to generate a unique random number for BID
 loanSchema.pre('save', async function (next) {

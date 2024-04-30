@@ -11,8 +11,9 @@ const httpResponse = require('../utils/httpResponse');
 const adminSchema = require('../utils/schema/mongo/admins_model');
 const userSchema = require('../utils/schema/mongo/users_model');
 const loanSchema = require('../utils/schema/mongo/loans_model');
+const roleSchema = require('../utils/schema/mongo/role_model');
 const contactsSchema = require('../utils/schema/mongo/contacts_model');
-// const otpSchema = require('../utils/schema/mongo/otp_model');
+const ratingSchema = require('../utils/schema/mongo/rating_ model');
 const aes = require('../utils/aes');
 const redisKeys = require('../utils/schema/redis/redisKeys');
 const redisSchema = require('../utils/schema/redis/model/allinOne_schema')
@@ -177,8 +178,7 @@ const fnGetUser = async (req, res) => {
         return httpResponse.fnSuccess(res, data);
     } catch (error) {
         logger.warn('fnGetUser', error);
-        if (error.code === 11000) return httpResponse.fnConflict(res);//MongoDB DuplicateKey error  
-        else return httpResponse.fnBadRequest(res);
+        return httpResponse.fnBadRequest(res);
     }
 
 }
@@ -344,8 +344,7 @@ const fnGetLoan = async (req, res) => {
         return httpResponse.fnSuccess(res, data);
     } catch (error) {
         logger.warn('fnGetLoan', error);
-        if (error.code === 11000) return httpResponse.fnConflict(res);//MongoDB DuplicateKey error  
-        else return httpResponse.fnBadRequest(res);
+        return httpResponse.fnBadRequest(res);
     }
 
 }
@@ -392,15 +391,15 @@ const fnListContact = async (req, res) => {
     try {
         if (!req.currentUserData || !Object.keys(req.currentUserData).length === 0) return httpResponse.fnUnauthorized(res);
         const BID = parseInt(req.currentUserData.BID) || 0;
-        if (!BID) return httpResponse.fnPreConditionFailed(res);
-        const contacts = await mongoOps.fnFind(contactsSchema, { BID, _loanId: new ObjectId(req.query._loanId) }, { __v: 0, })
+        const _loanId = req.query._loanId
+        if (!ObjectId.isValid(_loanId) || !BID) return httpResponse.fnPreConditionFailed(res);
+        const contacts = await mongoOps.fnFind(contactsSchema, { BID, _loanId: new ObjectId(_loanId) }, { __v: 0, })
         //Encryption
         const data = await aes.fnEncryptAES(contacts)
         return httpResponse.fnSuccess(res, data);
     } catch (error) {
         logger.warn('fnListContact', error);
-        if (error.code === 11000) return httpResponse.fnConflict(res);//MongoDB DuplicateKey error  
-        else return httpResponse.fnBadRequest(res);
+        return httpResponse.fnBadRequest(res);
     }
 
 }
@@ -438,6 +437,110 @@ const fnDeleteContact = async (req, res) => {
     }
 }
 
+//Get S uggestion 
+const fnGetSuggestion = async (req, res) => {
+    try {
+        if (!req.currentUserData || !Object.keys(req.currentUserData).length === 0) return httpResponse.fnUnauthorized(res);
+        const BID = parseInt(req.currentUserData.BID) || 0;
+        const type = req.query.type || null;
+        if (!type || !BID) return httpResponse.fnPreConditionFailed(res);
+        const output = {};//U: [], R: [] 
+        //get all user
+        if (type == 'RM') {
+            output.U = await mongoOps.fnFind(userSchema, { BID, S: 1 }, { N: 1, E: 1 })
+            // output.R = await mongoOps.fnFind(userSchema, { BID, S: 1 }, { N: 1, E: 1 })
+        }
+        // const data = await aes.fnEncryptAES(output);
+        return httpResponse.fnSuccess(res, output);
+    } catch (error) {
+        logger.warn('fnGetSuggestion', error);
+        return httpResponse.fnBadRequest(res);
+    }
+
+}
+
+//Adding Role 
+const fnAddRole = async (req, res) => {
+    try {
+
+        if (!req.currentUserData || !Object.keys(req.currentUserData).length === 0) return httpResponse.fnUnauthorized(res);
+        const BID = parseInt(req.currentUserData.BID) || 0;//UUID
+        if (!BID) return httpResponse.fnPreConditionFailed(res);
+        let option;
+        req.query.type == 'EDIT' ? option = { new: true, upsert: true } : option = { new: true, upsert: true, lean: true }
+        // Add role
+        // req.body.P=helper.fnParseJSON(req.body.P) 
+        await mongoOps.fnFindOneAndUpdate(
+            roleSchema,
+            { BID, N: req.body.N },
+            { ...req.body },
+            option
+
+        );
+        return httpResponse.fnSuccess(res);
+    } catch (error) {
+        logger.warn('fnAddRole', error)
+        if (error.code === 11000) return httpResponse.fnConflict(res);//MongoDB DuplicateKey error
+        else return httpResponse.fnBadRequest(res);
+
+    }
+};
+
+//List Role 
+const fnListRole = async (req, res) => {
+    try {
+        if (!req.currentUserData || !Object.keys(req.currentUserData).length === 0) return httpResponse.fnUnauthorized(res);
+        const BID = parseInt(req.currentUserData.BID) || 0;
+        if (!BID) return httpResponse.fnPreConditionFailed(res);
+        const data = await aes.fnEncryptAES(await mongoOps.fnFind(roleSchema, { BID }));
+        return httpResponse.fnSuccess(res, data);
+    } catch (error) {
+        logger.warn('fnListRole', error);
+        return httpResponse.fnBadRequest(res);
+    }
+}
+//Adding Rating  
+const fnAddRating = async (req, res) => {
+    try {
+
+        if (!req.currentUserData || !Object.keys(req.currentUserData).length === 0) return httpResponse.fnUnauthorized(res);
+        const BID = parseInt(req.currentUserData.BID) || 0;//UUID
+        const _loanId = req.body._loanId || null
+        logger.debug("Adding...", _loanId, req.body)
+        if (!ObjectId.isValid(_loanId) || !BID) return httpResponse.fnConflict(res);
+        // Add Rating
+        await mongoOps.fnFindOneAndUpdate(
+            ratingSchema,
+            { BID, A: req.body.A, DT: req.body.DT, _loanId: new ObjectId(_loanId) },
+            { ...req.body },
+            { new: true, upsert: true, lean: true }
+
+        );
+        return httpResponse.fnSuccess(res);
+    } catch (error) {
+        logger.warn('fnAddRating', error)
+        if (error.code === 11000) return httpResponse.fnConflict(res);//MongoDB DuplicateKey error
+        else return httpResponse.fnBadRequest(res);
+
+    }
+};
+
+//List Rating 
+const fnListRating = async (req, res) => {
+    try {
+        if (!req.currentUserData || !Object.keys(req.currentUserData).length === 0) return httpResponse.fnUnauthorized(res);
+        const BID = parseInt(req.currentUserData.BID) || 0;
+        const _loanId = req.query._loanId || null;
+        if (!ObjectId.isValid(_loanId) || !BID) return httpResponse.fnConflict(res);
+        const data = await aes.fnEncryptAES(await mongoOps.fnFind(ratingSchema, { BID, _loanId: new ObjectId(_loanId) }));
+        return httpResponse.fnSuccess(res, data);
+    } catch (error) {
+        logger.warn('fnListRating', error);
+        return httpResponse.fnBadRequest(res);
+    }
+}
+
+
 module.exports = {
     fnTestApp,
     fnEncryptTest,
@@ -457,7 +560,12 @@ module.exports = {
     fnListContact,
     fnGetLoan,
     fnCreateAID,
-    fnListLoan
+    fnListLoan,
+    fnGetSuggestion,
+    fnAddRole,
+    fnListRole,
+    fnAddRating,
+    fnListRating
 }
 
 const _sendEmail = async (options) => {

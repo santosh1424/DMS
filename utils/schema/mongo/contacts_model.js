@@ -32,7 +32,10 @@ const contactDetailsSchema = new mongoose.Schema({
         ref: 'loan_model',
         required: true
     }
-});
+}, {
+    timestamps: true
+}
+);
 
 
 module.exports = mongoose.model('contact_model', contactDetailsSchema);

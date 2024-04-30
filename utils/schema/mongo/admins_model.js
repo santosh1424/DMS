@@ -44,7 +44,10 @@ const adminSchema = new mongoose.Schema({
         default: generateUniqueBid
     },
 
-});
+}, {
+    timestamps: true
+}
+);
 
 // Custom function to generate a unique random number for BID
 adminSchema.pre('save', async function (next) {

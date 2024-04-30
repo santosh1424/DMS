@@ -31,7 +31,15 @@ router.post('/createAID', validate.fnDecryptBody, validate.fnAuthenticateToken, 
 router.post('/createLoan', validate.fnDecryptBody, [validate.createLoanVaildate, validate.fnAuthenticateToken, validate.vaildator], allinOneController.fnCreateLoan);
 router.get('/listLoan', validate.fnAuthenticateToken, allinOneController.fnListLoan);
 router.get('/getLoan', validate.fnAuthenticateToken, allinOneController.fnGetLoan);
+router.get('/suggestion', validate.fnAuthenticateToken, allinOneController.fnGetSuggestion);
 
+//Roles
+router.post('/addRole', [validate.fnDecryptBody, validate.roleVaildate, validate.fnAuthenticateToken, validate.vaildator], allinOneController.fnAddRole);
+router.get('/listRole', validate.fnAuthenticateToken, allinOneController.fnListRole);
+
+//Rating
+router.post('/addRating', [validate.fnDecryptBody, validate.ratingVaildate, validate.fnAuthenticateToken, validate.vaildator], allinOneController.fnAddRating);
+router.get('/listRating', validate.fnAuthenticateToken, allinOneController.fnListRating);
 //Contact Routes 
 router.post('/createContact', validate.fnDecryptBody, [validate.createContactVaildate, validate.fnAuthenticateToken, validate.vaildator], allinOneController.fnCreateContact);
 router.get('/listContact', validate.fnAuthenticateToken, allinOneController.fnListContact);

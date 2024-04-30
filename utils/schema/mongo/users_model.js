@@ -41,7 +41,10 @@ const user = new mongoose.Schema({
         type: mongoose.Schema.Types.ObjectId,
         ref: 'admins_model'
     }
-});
+}, {
+    timestamps: true
+}
+);
 
 
 
