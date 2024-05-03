@@ -8,10 +8,10 @@
  */
 
 require('dotenv').config();
-const express = require('express'), cors = require('cors'), httpResponse = require('./utils/httpResponse');
+const express = require('express'), cors = require('cors'),
+    httpResponse = require('./utils/httpResponse');
 const Redis = require('ioredis');
 const socketIO = require('socket.io');
-
 global.constants = require('./constants/sever_constant');
 global.logger = require('./config/logger_config');
 global.helper = require('./utils/helper');
@@ -53,9 +53,11 @@ const { fnConfigureSocketIO } = require('./config/socketConfig');
                         reconnectionDelay: 1000, // Delay between reconnection attempts (in milliseconds)
                         // reconnectionAttempts: 3, // Number of reconnection attempts
                         cors: {
-                            origin: ["http://localhost:5173", "http://192.168.1.9:3000", "http://localhost:3000"]//Frontend ip
+                            origin: ["http://localhost:5173", "http://192.168.1.9:3000", "http://192.168.1.6:3000"]//Frontend ip
                         }
                     });
+                    //socket fnMaintenancesCheck
+                    io.use((res, next) => (parseInt(constants.UNDER_MAINTENANCE_MODE)) ? next(httpResponse.fnServiceUnavailable(res)) : next());
                     await fnConfigureSocketIO(io);//Socket Connection
                     logger.info('Server is Up and Running', http.address());
                 } catch (error) {

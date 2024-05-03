@@ -27,6 +27,16 @@ const user = new mongoose.Schema({
         required: true,
         trim: true
     },
+    RM: {
+        type: String,
+        required: true,
+        trim: true
+    },
+    Z: {
+        type: Number,
+        required: true,
+        trim: true
+    },
     S: {
         type: Number,
         required: true,
@@ -56,6 +66,13 @@ module.exports = mongoose.model('users_model', user);
  * P-password
  * N- Name
  * R- Role
+ * RM-Reporting manager
+ * Z-Zone
+ *      1:West
+ *      2:South
+ *      3:East
+ *      4:North
+ * 
  * TKN-Token
  * S-
  * 1:Unverified

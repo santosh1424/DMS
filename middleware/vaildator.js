@@ -60,10 +60,18 @@ const userAddVaildate = [
     check("E", "Email is Required").not().isEmpty().trim(),
     check("P", "Password is Required").not().isEmpty().trim(),
 ];
+const teamMembersAddVaildate = [
+    // check("N", "Name is Required").not().isEmpty().trim(),
+    // check("R", "Role is Required").not().isEmpty().trim(),
+    // check("E", "Email is Required").not().isEmpty().trim(),
+    check("_loanId", "loanId is Required").not().isEmpty().trim(),
+    // check("AID", "AID is Required").not().isEmpty().trim(),
+    // check("BID", "BID is Required").not().isEmpty().trim(),
+];
 const roleVaildate = [
     check("N", "Name is Required").not().isEmpty().trim(),
     check("P", "Permission is Required").not().isEmpty().trim()
-]; 
+];
 const ratingVaildate = [
     check("A", "Agency is Required").not().isEmpty().isInt(),
     check("T", "Type is Required").not().isEmpty().isInt(),
@@ -126,5 +134,6 @@ module.exports = {
     createContactVaildate,
     roleVaildate,
     ratingVaildate,
+    teamMembersAddVaildate,
     fnMaintenancesCheck
 }

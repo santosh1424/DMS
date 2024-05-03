@@ -31,7 +31,11 @@ router.post('/createAID', validate.fnDecryptBody, validate.fnAuthenticateToken, 
 router.post('/createLoan', validate.fnDecryptBody, [validate.createLoanVaildate, validate.fnAuthenticateToken, validate.vaildator], allinOneController.fnCreateLoan);
 router.get('/listLoan', validate.fnAuthenticateToken, allinOneController.fnListLoan);
 router.get('/getLoan', validate.fnAuthenticateToken, allinOneController.fnGetLoan);
-router.get('/suggestion', validate.fnAuthenticateToken, allinOneController.fnGetSuggestion);
+
+//Teams
+router.post('/addMember', [validate.fnDecryptBody, validate.teamMembersAddVaildate, validate.fnAuthenticateToken, validate.vaildator], allinOneController.fnAddTeamMember);
+router.get('/getTeam', validate.fnAuthenticateToken, allinOneController.fnGetTeam);
+router.get('/suggestion', validate.fnAuthenticateToken, allinOneController.fnSuggestion);
 
 //Roles
 router.post('/addRole', [validate.fnDecryptBody, validate.roleVaildate, validate.fnAuthenticateToken, validate.vaildator], allinOneController.fnAddRole);

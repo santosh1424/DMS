@@ -12,6 +12,7 @@ const adminSchema = require('../utils/schema/mongo/admins_model');
 const userSchema = require('../utils/schema/mongo/users_model');
 const loanSchema = require('../utils/schema/mongo/loans_model');
 const roleSchema = require('../utils/schema/mongo/role_model');
+const teamSchema = require('../utils/schema/mongo/team_model');
 const contactsSchema = require('../utils/schema/mongo/contacts_model');
 const ratingSchema = require('../utils/schema/mongo/rating_ model');
 const aes = require('../utils/aes');
@@ -85,7 +86,6 @@ const fnAddAdmin = async (req, res) => {
 //Login for any Users 
 const fnLogin = async (req, res) => {
     try {
-        req.body = await helper.fnParseJSON(req.body) || null;
         const user = await mongoOps.fnFindOne(userSchema, { E: req.body.E }, { __v: 0 });
         if (!user) return httpResponse.fnUnauthorized(res);
         const isPasswordValid = await bcrypt.compare(req.body.P, user.P);
@@ -105,9 +105,9 @@ const fnLogin = async (req, res) => {
         const updateUserTKN = await mongoOps.fnFindOneAndUpdate(userSchema, { BID: user.BID, E: user.E, }, { TKN }, { new: true, lean: true, projection: { P: 0, __v: 0 } });
         //Add user in redis
         await redisClient.hmset(redisKeys.fnUserKey(user.BID, user._id), await redisSchema.fnSetUserSchema(updateUserTKN));
-        const data = { TKN }
+        const data = await aes.fnEncryptAES({ TKN })
         //Encryption
-        return httpResponse.fnSuccess(res, await aes.fnEncryptAES(data));
+        return httpResponse.fnSuccess(res, data);
     } catch (error) {
         logger.warn('fnLoginAdmin', error)
         return httpResponse.fnBadRequest(res);
@@ -437,45 +437,80 @@ const fnDeleteContact = async (req, res) => {
     }
 }
 
-//Get S uggestion 
-const fnGetSuggestion = async (req, res) => {
+//List Suggestion 
+const fnSuggestion = async (req, res) => {
     try {
         if (!req.currentUserData || !Object.keys(req.currentUserData).length === 0) return httpResponse.fnUnauthorized(res);
         const BID = parseInt(req.currentUserData.BID) || 0;
         const type = req.query.type || null;
         if (!type || !BID) return httpResponse.fnPreConditionFailed(res);
-        const output = {};//U: [], R: [] 
-        //get all user
+        let data = {};
+        //Relationship Mapping
         if (type == 'RM') {
-            output.U = await mongoOps.fnFind(userSchema, { BID, S: 1 }, { N: 1, E: 1 })
-            // output.R = await mongoOps.fnFind(userSchema, { BID, S: 1 }, { N: 1, E: 1 })
+            data.U = await mongoOps.fnFind(userSchema, { BID }, { N: 1, E: 1 })
+            data.R = await mongoOps.fnFind(roleSchema, { BID }, { N: 1, P: 1 })
         }
-        // const data = await aes.fnEncryptAES(output);
-        return httpResponse.fnSuccess(res, output);
+        data = await aes.fnEncryptAES(data);
+        return httpResponse.fnSuccess(res, data);
     } catch (error) {
-        logger.warn('fnGetSuggestion', error);
+        logger.warn('fnSuggestion', error);
         return httpResponse.fnBadRequest(res);
     }
 
 }
 
+//Get Team 
+const fnGetTeam = async (req, res) => {
+    try {
+        if (!req.currentUserData || !Object.keys(req.currentUserData).length === 0) return httpResponse.fnUnauthorized(res);
+        const BID = parseInt(req.currentUserData.BID) || 0;
+        // const type = req.query.t ype || null;
+        const _loanId = req.query._loanId || null;
+        if (!ObjectId.isValid(_loanId) || !BID) return httpResponse.fnPreConditionFailed(res);
+        let data = {};
+        //Fetch Single Team Detail
+        data = await mongoOps.fnFindOne(teamSchema, { BID, _id: new ObjectId(_loanId) }, { _id: 1, N: 1, M: 1, TS: 1 })
+        data = await aes.fnEncryptAES(data);
+        return httpResponse.fnSuccess(res, data);
+    } catch (error) {
+        logger.warn('fnGetTeam', error);
+        return httpResponse.fnBadRequest(res);
+    }
+
+}
+
+//Adding Member to a Team 
+const fnAddTeamMember = async (req, res) => {
+    try {
+        if (!req.currentUserData || !Object.keys(req.currentUserData).length === 0) return httpResponse.fnUnauthorized(res);
+        const _loanId = req.body._loanId || null;
+        const BID = parseInt(req.currentUserData.BID) || 0;//UUID
+        delete req.body._loanId
+        if (!ObjectId.isValid(_loanId) || !BID) return httpResponse.fnPreConditionFailed(res);
+        let data = await mongoOps.fnFindOneAndUpdate(teamSchema, { BID, _id: new ObjectId(_loanId) }, { ...req.body }, { new: true, upsert: true, lean: true })
+        data = await aes.fnEncryptAES(data);
+        return httpResponse.fnSuccess(res, data);
+    } catch (error) {
+        logger.warn('fnAddTeamMember', error)
+        if (error.code === 11000) return httpResponse.fnConflict(res);//MongoDB DuplicateKey error
+        else return httpResponse.fnBadRequest(res);
+    }
+};
+
 //Adding Role 
 const fnAddRole = async (req, res) => {
     try {
-
         if (!req.currentUserData || !Object.keys(req.currentUserData).length === 0) return httpResponse.fnUnauthorized(res);
         const BID = parseInt(req.currentUserData.BID) || 0;//UUID
         if (!BID) return httpResponse.fnPreConditionFailed(res);
         let option;
         req.query.type == 'EDIT' ? option = { new: true, upsert: true } : option = { new: true, upsert: true, lean: true }
         // Add role
-        // req.body.P=helper.fnParseJSON(req.body.P) 
         await mongoOps.fnFindOneAndUpdate(
             roleSchema,
             { BID, N: req.body.N },
             { ...req.body },
             option
-
         );
         return httpResponse.fnSuccess(res);
     } catch (error) {
@@ -561,7 +596,9 @@ module.exports = {
     fnGetLoan,
     fnCreateAID,
     fnListLoan,
-    fnGetSuggestion,
+    fnSuggestion,
+    fnGetTeam,
+    fnAddTeamMember,
     fnAddRole,
     fnListRole,
     fnAddRating,

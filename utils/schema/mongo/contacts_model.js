@@ -27,6 +27,7 @@ const contactDetailsSchema = new mongoose.Schema({
     RS: { type: String, trim: true },       // Register State
     RCC: { type: String, trim: true },      // Register Country Code
     RP: { type: String, trim: true },        // Register Pincode
+    S: { type: Number, trim: true, default: 1 },
     _loanId: {
         type: mongoose.Schema.Types.ObjectId,
         ref: 'loan_model',
@@ -45,6 +46,9 @@ module.exports = mongoose.model('contact_model', contactDetailsSchema);
  * |4|**Contact Details**||
  *  BID-Business ID
  *  AID-Agreement Id
+ *  S- Status 
+ *      1-Active
+ *      2-Inactive
  *  CT-Contact Type
  *      1 Borrower
  *      2 Promotor 
