@@ -24,7 +24,6 @@ const user = new mongoose.Schema({
     },
     TKN: {
         type: String,
-        required: true,
         trim: true
     },
     RM: {

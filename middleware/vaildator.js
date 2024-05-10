@@ -99,10 +99,8 @@ const createLoanVaildate = [
 ];
 const createContactVaildate = [
     //CT CE CN _loanId
-    check("AID", "AID is Required").not().isEmpty().trim(),
-    // check("CE", "CE is Required").not().isEmpty().trim(),
-    // check("CN", "CN is Required").not().isEmpty().trim()
-    // check("_loanId", "_loanId is Required").not().isEmpty().trim(), 
+    check("CE", "CE is Required").not().isEmpty().trim(),
+    check("_loanId", "loan Id is Required").not().isEmpty().trim()
 ];
 const userEditVaildate = [
     check("N", "Name is Required").not().isEmpty().trim(),

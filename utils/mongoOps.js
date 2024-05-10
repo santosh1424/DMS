@@ -42,6 +42,11 @@ const fnInsertMany = async (collectionName, documents) => {
     return await collectionName.insertMany(documents);
 };
 
+const fnSave = async (collectionName, documents) => {
+    const newDocument = new collectionName(documents);
+    return await newDocument.save();
+};
+
 module.exports = {
     fnFind,
     fnFindOne,
@@ -51,5 +56,6 @@ module.exports = {
     fnDeleteOne,
     fnDeleteMany,
     fnInsertOne,
-    fnInsertMany
+    fnInsertMany,
+    fnSave
 }

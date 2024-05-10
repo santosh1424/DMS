@@ -30,12 +30,10 @@ const adminSchema = new mongoose.Schema({
     },
     MU: {
         type: Number,
-        required: true,
         trim: true
     },
     TKN: {
         type: String,
-        required: true,
         trim: true
     },
     BID: {
