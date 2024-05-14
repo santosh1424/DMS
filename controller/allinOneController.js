@@ -92,7 +92,7 @@ const fnLogin = async (req, res) => {
         const isPasswordValid = await bcrypt.compare(req.body.P, user.P);
 
         if (!isPasswordValid) return httpResponse.fnPreConditionFailed(res);
-        else if (user.S != 2) return httpResponse.fnConflict(res);
+        else if (user.S != 3) return httpResponse.fnConflict(res);
         //Create a new TKN
         const TKN = await jwt.sign({
             E: user.E,
