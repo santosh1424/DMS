@@ -53,7 +53,8 @@ const { fnConfigureSocketIO } = require('./config/socketConfig');
                         reconnectionDelay: 1000, // Delay between reconnection attempts (in milliseconds)
                         // reconnectionAttempts: 3, // Number of reconnection attempts
                         cors: {
-                            origin: ["http://localhost:5173", "http://192.168.1.9:3000", "http://192.168.1.6:3000"]//Frontend ip
+                            // origin: ["http://localhost:5173", "http://192.168.1.9:3000", "https://dms-site.vercel.app/"]//"http://192.168.1.6:3000"]//Frontend ip
+                            origin: ["https://dms-site.vercel.app/"]//"http://192.168.1.6:3000"]//Frontend ip
                         }
                     });
                     //socket fnMaintenancesCheck
