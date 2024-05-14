@@ -54,4 +54,6 @@ router.delete('/deleteContact', validate.fnAuthenticateToken, allinOneController
 router.get('/sendOTP', validate.fnAuthenticateToken, allinOneController.fnSendOTP);
 router.post('/verifyOTP', validate.fnDecryptBody, validate.fnAuthenticateToken, allinOneController.fnVerifyOTP);
 
+//Upload
+router.post('/uploadTest', validate.fnDecryptBody, validate.fnAuthenticateToken, allinOneController.fnUploadTest);
 module.exports = router

@@ -7,22 +7,24 @@
 const mongoose = require('mongoose');
 
 const teamSchema = new mongoose.Schema({
-    // N: { type: String, required: true },
-    // AID: { type: String, required: true },
     BID: { type: Number, required: true },
     TS: { type: Number, required: true, default: 1 },
-    M: [{
+    PM: [{
         N: { type: String, required: true },
         E: { type: String, required: true },
-        R: { type: String, required: true },
         S: { type: Number, required: true, default: 1 },
+        _id: false
     }],
-    // _loanId: {
-    //     type: mongoose.Schema.Types.ObjectId,
-    //     ref: 'loan_model',
-    //     required: true
-    // }
-});
+    PE: [{
+        N: { type: String, required: true },
+        E: { type: String, required: true },
+        S: { type: Number, required: true, default: 1 },
+        _id: false
+    }]
+}, {
+    timestamps: true
+}
+);
 
 module.exports = mongoose.model('team_model', teamSchema);
 
@@ -30,8 +32,8 @@ module.exports = mongoose.model('team_model', teamSchema);
  * 
  * BID
  * N-Name
- * M-members [{N1,R2},{N2,R2},{N3,R1}]  {N-name ,E-Email,R-Role,S-Status}
- * 
+ * PM-Project Manager [{N1,R2},{N2,R2},{N3,R1}]  {N-name ,E-Email,R-Role,S-Status}
+ * PE-Project Employer [{N1,R2},{N2,R2},{N3,R1}]  {N-name ,E-Email,R-Role,S-Status}
  * TS- Status
  * 1-Active
  * 2-Inactive

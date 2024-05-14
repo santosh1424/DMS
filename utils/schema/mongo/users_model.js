@@ -46,6 +46,10 @@ const user = new mongoose.Schema({
         type: Number,
         required: true,
     },
+    UP: {
+        type: Object,
+        required: true,
+    },
     _adminId: {
         type: mongoose.Schema.Types.ObjectId,
         ref: 'admins_model'
@@ -61,10 +65,11 @@ module.exports = mongoose.model('users_model', user);
 
 /**
  * 
- * E-email
- * P-password
- * N- Name
- * R- Role
+ * E-Email
+ * P-Password
+ * N-Name
+ * R-Role
+ * UP-User Permission
  * RM-Reporting manager
  * Z-Zone
  *      1:West
@@ -73,10 +78,10 @@ module.exports = mongoose.model('users_model', user);
  *      4:North
  * 
  * TKN-Token
- * S-
- * 1:Unverified
- * 2:Active
- * 3:UnActive
+ * S-Status
+ *      1:Unverified
+ *      2:Active
+ *      3:UnActive
  * 
  * BID-Business ID
  * 

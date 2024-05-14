@@ -11,7 +11,8 @@ const httpResponse = require('../utils/httpResponse');
 const aes = require('../utils/aes');
 const { check, validationResult } = require('express-validator')
 const jwt = require('jsonwebtoken');
-
+const userSchema = require('../utils/schema/mongo/users_model');
+const ObjectId = require('mongoose').Types.ObjectId;
 const vaildator = (req, res, next) => {
     const vaildationError = validationResult(req).mapped();
     if (_.keys(vaildationError).length > 0) return httpResponse.fnPreConditionFailed(res);
@@ -46,6 +47,48 @@ const fnDecryptBody = async (req, res, next) => {
 
     }
 
+}
+
+const fnTD = (req, res, next) => {
+    try {
+    } catch (error) {
+        return logger.warn('fnTD', error);
+    }
+}
+
+// const fnCheckPermission = async (req, res, next) => {
+//     try {
+//         const _loanId = req.query._loanId;
+//         const BID = req.currentUserData.BID;
+//         const E = req.currentUserData.E;
+//         let data = await mongoOps.fnFindOne(teamSchema, { BID, _id: new ObjectId(_loanId), "M.E": E }, {
+//             M: {
+//                 $filter: {
+//                     input: "$M",
+//                     as: "member",
+//                     cond: { $eq: ["$$member.E", E] }
+//                 },
+
+//             },
+//             _id: 0 // Exclude the default _id field from the result
+//         })
+//         // logger.debug('fnCheckPermission', data.M[0].P)
+//         // if (_loanId)
+//         return next();
+//     } catch (error) {
+//         return logger.warn('fnDecryptBody', error);
+//     }
+// }
+
+const fnGetPermission = async (req, res, next) => {
+    try {
+        const _id = req.query._id;
+        const aPremission = await mongoOps.fnFindOne(userSchema, { _id: new ObjectId(_id) }, { _id: 0, UP: 1 })
+        req.currentUserData.UP = aPremission.UP;
+        return next();
+    } catch (error) {
+        return logger.warn('fnDecryptBody', error);
+    }
 }
 
 const adminAddVaildate = [
@@ -133,5 +176,8 @@ module.exports = {
     roleVaildate,
     ratingVaildate,
     teamMembersAddVaildate,
-    fnMaintenancesCheck
+    fnMaintenancesCheck,
+    // fnCheckPermission
+    fnGetPermission,
+    fnTD
 }

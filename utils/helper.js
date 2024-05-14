@@ -6,7 +6,7 @@
  */
 const _ = require('lodash');
 
-const fnStringlyJSON = async (data) => await JSON.stringify(data);
+const fnStringlyJSON = (data) => JSON.stringify(data);
 const fnParseJSON = async (data) => await _fnRecuringJSONPrase(data);
 
 const fnGracefulRestart = (err = "") => {

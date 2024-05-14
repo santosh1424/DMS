@@ -15,6 +15,7 @@ const roleSchema = require('../utils/schema/mongo/role_model');
 const teamSchema = require('../utils/schema/mongo/team_model');
 const contactsSchema = require('../utils/schema/mongo/contacts_model');
 const ratingSchema = require('../utils/schema/mongo/rating_ model');
+const transactionDocumentsSchema = require('../utils/schema/mongo/transactionDocuments_model');
 const aes = require('../utils/aes');
 const redisKeys = require('../utils/schema/redis/redisKeys');
 const redisSchema = require('../utils/schema/redis/model/allinOne_schema')
@@ -22,6 +23,8 @@ const bcrypt = require('bcryptjs')
 const jwt = require('jsonwebtoken');
 const nodeMailer = require("nodemailer");
 const ObjectId = require('mongoose').Types.ObjectId;
+const multer = require('multer');
+const { storage1, storage2 } = require('../config/file_config');
 
 const fnTestApp = (req, res) => {
     try {
@@ -34,6 +37,7 @@ const fnTestApp = (req, res) => {
 
 }
 
+//Encrypt
 const fnEncryptTest = async (req, res) => {
     try {
         const data = await aes.fnEncryptAES(req.body.data);
@@ -44,6 +48,7 @@ const fnEncryptTest = async (req, res) => {
     }
 }
 
+//Decrypt
 const fnDecryptTest = async (req, res) => {
     try {
         const data = await aes.fnDecryptAES(req.body.data);
@@ -167,9 +172,11 @@ const fnGetUser = async (req, res) => {
     try {
         if (!req.currentUserData || !Object.keys(req.currentUserData).length === 0) return httpResponse.fnUnauthorized(res);
         const _id = req.query._id || null;
+        // _fnGetModulePermission(req.query._id, 'UM', 'info');//(_userId,moduleName,action)
         const BID = parseInt(req.currentUserData.BID) || 0;
+        if (!req.currentUserData.UP || !req.currentUserData.UP.UM || !req.currentUserData.UP.UM.includes("access")) return httpResponse.fnForbidden(res);
         if (!ObjectId.isValid(_id) || !BID) return httpResponse.fnPreConditionFailed(res);
-        const data = await aes.fnEncryptAES(await mongoOps.fnFindOne(userSchema, { BID, _id: new ObjectId(_id), }));
+        const data = await aes.fnEncryptAES(await mongoOps.fnFindOne(userSchema, { BID, _id: new ObjectId(_id) }));
         return httpResponse.fnSuccess(res, data);
     } catch (error) {
         logger.warn('fnGetUser', error);
@@ -178,7 +185,7 @@ const fnGetUser = async (req, res) => {
 
 }
 
-//list ALL BasicUser 
+//List ALL BasicUser 
 const fnListUser = async (req, res) => {
     try {
         if (!req.currentUserData || !Object.keys(req.currentUserData).length === 0) return httpResponse.fnUnauthorized(res);
@@ -338,7 +345,6 @@ const fnGetLoan = async (req, res) => {
         logger.warn('fnGetLoan', error);
         return httpResponse.fnBadRequest(res);
     }
-
 }
 
 //Create Contacts
@@ -430,13 +436,14 @@ const fnSuggestion = async (req, res) => {
         if (!req.currentUserData || !Object.keys(req.currentUserData).length === 0) return httpResponse.fnUnauthorized(res);
         const BID = parseInt(req.currentUserData.BID) || 0;
         const type = req.query.type || null;
-        if (!type || !BID) return httpResponse.fnPreConditionFailed(res);
+        const Z = req.query.Z || null;//Zone
+        if (!type || !BID || !Z) return httpResponse.fnPreConditionFailed(res);
         let data = {};
         //Relationship Mapping
-        if (type == 'RM') {
-            data.U = await mongoOps.fnFind(userSchema, { BID }, { N: 1, E: 1 })
+        if (type == 'UM') {
+            data.U = await mongoOps.fnFind(userSchema, { BID, Z }, { N: 1, E: 1 })
             data.R = await mongoOps.fnFind(roleSchema, { BID }, { N: 1, P: 1 })
-        }
+        } else if (type == 'RM') data = await mongoOps.fnFind(userSchema, { BID, Z }, { N: 1, E: 1 })
         data = await aes.fnEncryptAES(data);
         return httpResponse.fnSuccess(res, data);
     } catch (error) {
@@ -454,9 +461,8 @@ const fnGetTeam = async (req, res) => {
         // const type = req.query.t ype || null;
         const _loanId = req.query._loanId || null;
         if (!ObjectId.isValid(_loanId) || !BID) return httpResponse.fnPreConditionFailed(res);
-        let data = {};
         //Fetch Single Team Detail
-        data = await mongoOps.fnFindOne(teamSchema, { BID, _id: new ObjectId(_loanId) }, { _id: 1, N: 1, M: 1, TS: 1 })
+        let data = await mongoOps.fnFindOne(teamSchema, { BID, _id: new ObjectId(_loanId) }, { _id: 1, N: 1, PM: 1, PE: 1, TS: 1 })
         data = await aes.fnEncryptAES(data);
         return httpResponse.fnSuccess(res, data);
     } catch (error) {
@@ -472,7 +478,7 @@ const fnAddTeamMember = async (req, res) => {
         if (!req.currentUserData || !Object.keys(req.currentUserData).length === 0) return httpResponse.fnUnauthorized(res);
         const _loanId = req.body._loanId || null;
         const BID = parseInt(req.currentUserData.BID) || 0;//UUID
-        delete req.body._loanId
+        delete req.body._loanId;
         if (!ObjectId.isValid(_loanId) || !BID) return httpResponse.fnPreConditionFailed(res);
         let data = await mongoOps.fnInsertOne(teamSchema, { BID, ...req.body })
         data = await aes.fnEncryptAES(data);
@@ -553,6 +559,30 @@ const fnListRating = async (req, res) => {
     }
 }
 
+const fnUploadTest = async (req, res) => {
+    try {
+        // return null;
+        logger.debug('fnUploadTest', req.currentUserData)
+        if (!req.currentUserData || !Object.keys(req.currentUserData).length === 0) return httpResponse.fnUnauthorized(res);
+        const BID = parseInt(req.currentUserData.BID) || 0;
+        const dynamicStorage = storage1;//req.body.useStorage2 ? storage2 : storage1;
+        let uploadMiddleware = multer({ storage: dynamicStorage }).array('file');
+        // Call the upload middleware
+        uploadMiddleware(req, res, (err) => {
+            if (err) return httpResponse.fnConflict(res);
+            // logger.debug(req.currentUserData, req.files, req.body);
+            // if (req.body.data) req.body.data = helper.fnParseJSON(req.body.data)
+            // req.body = await aes.fnDecryptAES(req.body.data)
+            // logger.debug(req.body);
+            // logger.debug('filename',file, req.body);
+            return httpResponse.fnSuccess(res);
+        });
+        return null;
+    } catch (error) {
+        logger.warn('fnUploadTest ', error);
+        return httpResponse.fnBadRequest(res);
+    }
+};
 
 module.exports = {
     fnTestApp,
@@ -580,7 +610,8 @@ module.exports = {
     fnAddRole,
     fnListRole,
     fnAddRating,
-    fnListRating
+    fnListRating,
+    fnUploadTest
 }
 
 const _sendEmail = async (options) => {
@@ -605,4 +636,29 @@ const _sendEmail = async (options) => {
     };
 
     return await transporter.sendMail(mailOptions);
+}
+
+const _fnGetPermission = async (_id, moduleName = null) => {
+    try {
+        const aPr = await mongoOps.fnFindOne(userSchema, { _id: new ObjectId(_id) }, { _id: 0, P: 1 });
+        if (moduleName == "UM") return aPr.P.UM;
+        else return aPr.P;
+    } catch (error) {
+        return logger.warn('_fnGetPermission', error);
+    }
+}
+
+
+const _fnGetModulePermission = async (_userId = null, moduleName = null, action = null) => {
+
+    const aPremission = await mongoOps.fnFindOne(userSchema, { _id: new ObjectId(_userId) }, { _id: 0, UP: 1 })
+    // req.currentUserData.UP = aPremission.UP;
+    const text = `UP.${moduleName}`;
+
+    logger.debug(text, aPremission, '_fnGetModulePermission', aPremission.UP.UM, 'ttt', aPremission[text])
+    // aPremission.text.includes(action)
+
+    // }
+    // return true;
+    // return false;
 }
