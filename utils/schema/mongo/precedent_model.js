@@ -1,15 +1,14 @@
 'use strict'
 /**
- * transaction_model.js:Transaction Detail
+ * precedent_model.js:precedent Detail
  * Developer:Santosh Dubey
  * 
  */
 const mongoose = require('mongoose');
 
-const transactionSchema = new mongoose.Schema({
+const precedentSchema = new mongoose.Schema({
     BID: { type: Number, required: true },
-    N: { type: Number, required: true },
-    T: { type: Number, required: true },
+    N: { type: Number, required: true, unique: true },
     P: { type: Number, required: true },
     SD: { type: Date, required: true },
     ED: { type: Date, required: true },
@@ -20,22 +19,14 @@ const transactionSchema = new mongoose.Schema({
         ref: 'loan_model',
         required: true
     },
-    Docs: [{
-        N: { type: String, required: true },
-        S: { type: Number, required: true },
-        _userId: {
-            type: mongoose.Schema.Types.ObjectId,
-            ref: 'users_model',
-            required: true
-        },
-    }]
+    Docs: { type: Array, required: true },
 },
     {
         timestamps: true
     }
 );
 
-module.exports = mongoose.model('transactionsDocument_model', transactionSchema);
+module.exports = mongoose.model('precedent_model', precedentSchema);
 
 /**
  * 

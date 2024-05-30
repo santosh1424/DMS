@@ -19,7 +19,10 @@ const fnForbidden = (res, err = null) => {
     return res.sendStatus(403).end();
 }
 const fnNotFound = (res, err = null) => res.sendStatus(404).end();
-const fnConflict = (res, err = null) => res.sendStatus(409).end();
+const fnConflict = (res, err = null) => {
+    if (err) logger.warn('fnConflict', err);
+    return res.sendStatus(409).end();
+}
 
 const fnPreConditionFailed = (res, err = null) => {
     if (err) logger.warn('fnPreConditionFailed', err);

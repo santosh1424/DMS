@@ -1,30 +1,20 @@
 const fs = require('fs');
 const multer = require('multer');
-
-// Define multiple storage configurations
-const storage1 = multer.diskStorage({
-    destination: (req, file, cb) => {
-        // logger.debug('destination', req.currentUserData,file)
-        const uploadPath = `public/docs/${req.currentUserData.BID}/TD/common/`;//'uploadsTest/storage1/';
-        fnDirectoryExists(uploadPath);
-        cb(null, uploadPath);
-    },
-    filename: (req, file, cb) => {
-
-        cb(null, Date.now() + '-' + file.originalname);
-    },
-});
-
-const storage2 = multer.diskStorage({
-    destination: (req, file, cb) => {
-        const uploadPath = `public/docs/${req.currentUserData.BID}/TD/security/`
-
-        fnDirectoryExists(uploadPath);
-        cb(null, uploadPath);
+const aes = require('../utils/aes');
+const fnAllInStorage = multer.diskStorage({
+    destination: async (req, file, cb) => {
+        try {
+            req.body = await aes.fnDecryptAES(req.body.data);
+            const uploadPath = `public/docs/${req.currentUserData.BID}/${req.body.LOC}/`;
+            fnDirectoryExists(uploadPath);
+            cb(null, uploadPath);
+        } catch (error) {
+            cb(error, false);
+        }
     },
     filename: (req, file, cb) => {
         cb(null, Date.now() + '-' + file.originalname);
-    },
+    }
 });
 
 // Function to ensure directory exists
@@ -38,4 +28,4 @@ const fnDirectoryExists = (directory) => {
     }
 }
 
-module.exports = { storage1, storage2 };
+module.exports = { fnAllInStorage };

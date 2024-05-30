@@ -13,6 +13,9 @@ const { check, validationResult } = require('express-validator')
 const jwt = require('jsonwebtoken');
 const userSchema = require('../utils/schema/mongo/users_model');
 const ObjectId = require('mongoose').Types.ObjectId;
+const multer = require('multer');
+const { fnAllInStorage } = require('../config/file_config');
+
 const vaildator = (req, res, next) => {
     const vaildationError = validationResult(req).mapped();
     if (_.keys(vaildationError).length > 0) return httpResponse.fnPreConditionFailed(res);
@@ -23,7 +26,6 @@ const fnAuthenticateToken = async (req, res, next) => {
     try {
         const authHeader = req.headers['authorization'];
         let data = authHeader && authHeader.split(' ')[1];
-
         if (!data) return httpResponse.fnUnauthorized(res);
         data = await aes.fnDecryptAES(data);
         // Verify token
@@ -31,12 +33,40 @@ const fnAuthenticateToken = async (req, res, next) => {
             if (err) return httpResponse.fnConflict(res);
             //add decoded token in request
             req.currentUserData = decoded || null;
+            if (!req.currentUserData || !Object.keys(req.currentUserData).length === 0) return httpResponse.fnUnauthorized(res);
             next();
         });
     } catch (error) {
         return logger.warn('fnAuthenticateToken', error);
     }
 
+}
+const fnFileData = async (req, res, next) => {
+    try {
+        if (!req.query.LOC) return httpResponse.fnPreConditionFailed(res);
+        logger.debug('Uploading file too..', req.query.LOC);
+        const dynamicStorage = fnAllInStorage;
+        const uploadMiddleware = multer({ storage: dynamicStorage }).array('file');
+
+        uploadMiddleware(req, res, (err) => {
+            if (err) {
+                logger.warn('Error uploading files:', err);
+                return httpResponse.fnConflict(res);
+            }
+
+            if (!req.files || req.files.length === 0) {
+                logger.warn('No files uploaded');
+                // return res.status(400).json({ error: 'No files uploaded' });
+                return next();
+            }
+
+            // logger.debug('Uploaded files:', req.files);
+            next();
+        });
+        return null;
+    } catch (error) {
+        return logger.warn('fnFileData', error);
+    }
 }
 const fnDecryptBody = async (req, res, next) => {
     try {
@@ -55,6 +85,9 @@ const fnTD = (req, res, next) => {
         return logger.warn('fnTD', error);
     }
 }
+const uploadDocsVaildate = [
+    check("N", "Document Name is Required").not().isEmpty().isInt(),
+];
 
 // const fnCheckPermission = async (req, res, next) => {
 //     try {
@@ -127,18 +160,18 @@ const ratingVaildate = [
 const createLoanVaildate = [
     check("_loanId", "loanId is Required").not().isEmpty().trim(),
     check("AID", "AID is Required").not().isEmpty().trim(),
-    check("Z", "Z is Required").not().isEmpty().isInt(),
-    check("CN", "CN is Required").not().isEmpty().trim(),
-    check("PN", "PN is Required").not().isEmpty().trim(),
-    check("GN", "GN is Required").not().isEmpty().trim(),
-    check("I", "I is Required").not().isEmpty().isInt(),
-    check("SA", "SA is Required").not().isEmpty().isInt(),
-    check("HA", "HA is Required").not().isEmpty().isInt(),
-    check("PS", "PS is Required").not().isEmpty().isInt(),
-    check("T", "T is Required").not().isEmpty().isInt(),
-    check("ST", "ST is Required").not().isEmpty().isInt(),
-    check("SD", "SD is Required").not().isEmpty().trim(),
-    check("CD", "CD is Required").not().isEmpty().trim()
+    // check("Z", "Z is Required").not().isEmpty().isInt(),
+    // check("CN", "CN is Required").not().isEmpty().trim(),
+    // check("PN", "PN is Required").not().isEmpty().trim(),
+    // check("GN", "GN is Required").not().isEmpty().trim(),
+    // check("I", "I is Required").not().isEmpty().isInt(),
+    // check("SA", "SA is Required").not().isEmpty().isInt(),
+    // check("HA", "HA is Required").not().isEmpty().isInt(),
+    // check("PS", "PS is Required").not().isEmpty().isInt(),
+    // check("T", "T is Required").not().isEmpty().isInt(),
+    // check("ST", "ST is Required").not().isEmpty().isInt(),
+    // check("SD", "SD is Required").not().isEmpty().trim(),
+    // check("CD", "CD is Required").not().isEmpty().trim()
 ];
 const createContactVaildate = [
     //CT CE CN _loanId
@@ -179,5 +212,7 @@ module.exports = {
     fnMaintenancesCheck,
     // fnCheckPermission
     fnGetPermission,
-    fnTD
+    fnTD,
+    fnFileData,
+    uploadDocsVaildate
 }

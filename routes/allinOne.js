@@ -55,5 +55,12 @@ router.get('/sendOTP', validate.fnAuthenticateToken, allinOneController.fnSendOT
 router.post('/verifyOTP', validate.fnDecryptBody, validate.fnAuthenticateToken, allinOneController.fnVerifyOTP);
 
 //Upload
-router.post('/uploadTest', validate.fnDecryptBody, validate.fnAuthenticateToken, allinOneController.fnUploadTest);
+router.get('/listDocs', validate.fnAuthenticateToken, allinOneController.fnListDocs);
+router.get('/listDocsDetail', validate.fnAuthenticateToken, allinOneController.fnListDocsDetail);
+router.post('/uploadDocs', validate.fnAuthenticateToken, allinOneController.fnUploadTD);//ADD  validate.fnFileData,  validate.fnDecryptBody, [validate.uploadDocsVaildate, validate.vaildator],
+router.get('/viewDocs', validate.fnAuthenticateToken, allinOneController.fnViewDocs);
+router.delete('/deleteDocs', validate.fnAuthenticateToken, allinOneController.fnDeleteDocs);
+router.get('/downloadDocs', validate.fnAuthenticateToken, allinOneController.fnDownloadDocs);
+router.post('/updateDocs', validate.fnAuthenticateToken, allinOneController.fnUpdateTD);//EDIT
+// router.post('/uploadTD', validate.fnAuthenticateToken, validate.fnFileData, validate.fnDecryptBody, allinOneController.fnUploadTD);
 module.exports = router

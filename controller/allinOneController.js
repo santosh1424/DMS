@@ -8,14 +8,7 @@
  */
 const _ = require('lodash');
 const httpResponse = require('../utils/httpResponse');
-const adminSchema = require('../utils/schema/mongo/admins_model');
-const userSchema = require('../utils/schema/mongo/users_model');
-const loanSchema = require('../utils/schema/mongo/loans_model');
-const roleSchema = require('../utils/schema/mongo/role_model');
-const teamSchema = require('../utils/schema/mongo/team_model');
-const contactsSchema = require('../utils/schema/mongo/contacts_model');
-const ratingSchema = require('../utils/schema/mongo/rating_ model');
-const transactionDocumentsSchema = require('../utils/schema/mongo/transactionDocuments_model');
+const { adminSchema, userSchema, loanSchema, roleSchema, teamSchema, contactsSchema, ratingSchema, transactionSchema } = require('../utils/schema/mongo/index');
 const aes = require('../utils/aes');
 const redisKeys = require('../utils/schema/redis/redisKeys');
 const redisSchema = require('../utils/schema/redis/model/allinOne_schema')
@@ -23,8 +16,11 @@ const bcrypt = require('bcryptjs')
 const jwt = require('jsonwebtoken');
 const nodeMailer = require("nodemailer");
 const ObjectId = require('mongoose').Types.ObjectId;
+const path = require('path');
+const fs = require('fs');
 const multer = require('multer');
-const { storage1, storage2 } = require('../config/file_config');
+const { fnAllInStorage } = require('../config/file_config');
+const _uploadMiddleware = multer({ storage: fnAllInStorage }).array('file');
 
 const fnTestApp = (req, res) => {
     try {
@@ -119,8 +115,7 @@ const fnLogin = async (req, res) => {
 //Adding BasicUser 
 const fnAddUser = async (req, res) => {
     try {
-        if (!req.currentUserData || !Object.keys(req.currentUserData).length === 0) return httpResponse.fnUnauthorized(res);
-        req.body = await helper.fnParseJSON(req.body) || null
+        // req.body = await helper.fnParseJSON(req.body) || null
         const hashedPassword = await bcrypt.hash(req.body.P, 10);
         const BID = parseInt(req.currentUserData.BID) || 0;//UUID
         if (!BID) return httpResponse.fnPreConditionFailed(res);
@@ -149,8 +144,7 @@ const fnAddUser = async (req, res) => {
 //Edit BasicUser 
 const fnEditUser = async (req, res) => {
     try {
-        if (!req.currentUserData || !Object.keys(req.currentUserData).length === 0) return httpResponse.fnUnauthorized(res);
-        req.body = helper.fnParseJSON(req.body)
+        // req.body = helper.fnParseJSON(req.body)
         const updateUser = {}
         if (req.body.P) updateUser.P = await bcrypt.hash(req.body.P, 10);
         if (req.body.S) updateUser.S = parseInt(req.body.S);
@@ -170,7 +164,6 @@ const fnEditUser = async (req, res) => {
 //Get BasicUser 
 const fnGetUser = async (req, res) => {
     try {
-        if (!req.currentUserData || !Object.keys(req.currentUserData).length === 0) return httpResponse.fnUnauthorized(res);
         const _id = req.query._id || null;
         // _fnGetModulePermission(req.query._id, 'UM', 'info');//(_userId,moduleName,action)
         const BID = parseInt(req.currentUserData.BID) || 0;
@@ -188,7 +181,6 @@ const fnGetUser = async (req, res) => {
 //List ALL BasicUser 
 const fnListUser = async (req, res) => {
     try {
-        if (!req.currentUserData || !Object.keys(req.currentUserData).length === 0) return httpResponse.fnUnauthorized(res);
         const BID = parseInt(req.currentUserData.BID) || 0;
         //Encryption
         const data = await aes.fnEncryptAES(await mongoOps.fnFind(userSchema, { BID }, { __v: 0, P: 0 }))
@@ -202,7 +194,6 @@ const fnListUser = async (req, res) => {
 
 const fnSendOTP = async (req, res) => {
     try {
-        if (!req.currentUserData || !Object.keys(req.currentUserData).length === 0) return httpResponse.fnUnauthorized(res);
         if (parseInt(req.currentUserData.S) == 2) return httpResponse.fnPreConditionFailed(res);
         const email = req.currentUserData.E;
         const otp = helper.fnRandomNumber(1000, 9999); // Generate a 6-digit OTP
@@ -237,7 +228,6 @@ const fnSendOTP = async (req, res) => {
 
 const fnVerifyOTP = async (req, res) => {
     try {
-        if (!req.currentUserData || !Object.keys(req.currentUserData).length === 0) return httpResponse.fnUnauthorized(res);
         const otp = req.body.otp;
         const email = req.currentUserData.E;
         const _userId = req.currentUserData._userId;
@@ -272,8 +262,7 @@ const fnVerifyOTP = async (req, res) => {
 //Create Agreement Id
 const fnCreateAID = async (req, res) => {
     try {
-        if (!req.currentUserData || !Object.keys(req.currentUserData).length === 0) return httpResponse.fnUnauthorized(res);
-        const BID = parseInt(req.currentUserData.BID);
+        const BID = parseInt(req.currentUserData.BID) || 0;
         const AID = req.body.AID || null;
 
         if (AID) {// Creation of AID with User inputs
@@ -302,7 +291,6 @@ const fnCreateAID = async (req, res) => {
 //Create Loan
 const fnCreateLoan = async (req, res) => {
     try {
-        if (!req.currentUserData || !Object.keys(req.currentUserData).length === 0) return httpResponse.fnUnauthorized(res);
         const BID = parseInt(req.currentUserData.BID) || 0;
         const _loanId = req.body._loanId || null;
         if (!ObjectId.isValid(_loanId) || !BID) return httpResponse.fnConflict(res);
@@ -321,7 +309,6 @@ const fnCreateLoan = async (req, res) => {
 //Listing All Loans in Current Bussiness
 const fnListLoan = async (req, res) => {
     try {
-        if (!req.currentUserData || !Object.keys(req.currentUserData).length === 0) return httpResponse.fnUnauthorized(res);
         const BID = parseInt(req.currentUserData.BID) || 0;
         const data = await aes.fnEncryptAES(await mongoOps.fnFind(loanSchema, { BID }));
         return httpResponse.fnSuccess(res, data);
@@ -335,7 +322,6 @@ const fnListLoan = async (req, res) => {
 //Get Loan 
 const fnGetLoan = async (req, res) => {
     try {
-        if (!req.currentUserData || !Object.keys(req.currentUserData).length === 0) return httpResponse.fnUnauthorized(res);
         const _id = req.query._loanId || null;
         const BID = parseInt(req.currentUserData.BID) || 0;
         if (!ObjectId.isValid(_id) || !BID) return httpResponse.fnPreConditionFailed(res);
@@ -350,8 +336,6 @@ const fnGetLoan = async (req, res) => {
 //Create Contacts
 const fnCreateContact = async (req, res) => {
     try {
-        if (!req.currentUserData || !Object.keys(req.currentUserData).length === 0) return httpResponse.fnUnauthorized(res);
-        const BID = parseInt(req.currentUserData.BID) || 0;
         const _loanId = req.body._loanId || null;
         const _contactId = req.body._contactId || null;
         const type = req.query.type || null;
@@ -359,21 +343,14 @@ const fnCreateContact = async (req, res) => {
         if (!ObjectId.isValid(_loanId) || !BID) return httpResponse.fnConflict(res);
         const loan = await mongoOps.fnFindOne(loanSchema, { _id: new ObjectId(_loanId) })
         if (loan) {
-            let option, query, contact;
-
             if (type == 'EDIT') {
-                option = { new: true, lean: true };
-                query = { BID, _id: new ObjectId(_contactId) };
                 delete req.body.CE;
-                contact = await mongoOps.fnFindOneAndUpdate(contactsSchema, query, { ...req.body }, { new: true, lean: true });
-                //Only for Edit
-                if (type == 'EDIT' && !contact) return httpResponse.fnConflict(res);
+                await mongoOps.fnFindOneAndUpdate(contactsSchema, { BID, _id: new ObjectId(_contactId) }, { ...req.body }, { new: true, lean: true });
             } else {
-                query = { BID, _loanId: new ObjectId(_loanId), CE: req.body.CE };
-                contact = await mongoOps.fnInsertOne(contactsSchema, { BID, ...req.body });
+                await mongoOps.fnInsertOne(contactsSchema, { BID, ...req.body });
             }
-            const data = await aes.fnEncryptAES({ _contactId: contact._id });
-            return httpResponse.fnSuccess(res, data);
+            // const data = await aes.fnEncryptAES({ _contactId: contact._id });
+            return httpResponse.fnSuccess(res);
         } else return httpResponse.fnConflict(res);
     } catch (error) {
         logger.warn('fnCreateContact', error);
@@ -385,9 +362,8 @@ const fnCreateContact = async (req, res) => {
 //Get ALL Contacts
 const fnListContact = async (req, res) => {
     try {
-        if (!req.currentUserData || !Object.keys(req.currentUserData).length === 0) return httpResponse.fnUnauthorized(res);
         const BID = parseInt(req.currentUserData.BID) || 0;
-        const _loanId = req.query._loanId
+        const _loanId = req.query._loanId || null;
         if (!ObjectId.isValid(_loanId) || !BID) return httpResponse.fnPreConditionFailed(res);
         const contacts = await mongoOps.fnFind(contactsSchema, { BID, _loanId: new ObjectId(_loanId) }, { __v: 0, })
         //Encryption
@@ -403,7 +379,6 @@ const fnListContact = async (req, res) => {
 //View Single Contact 
 const fnGetContact = async (req, res) => {
     try {
-        if (!req.currentUserData || !Object.keys(req.currentUserData).length === 0) return httpResponse.fnUnauthorized(res);
         const _id = req.query._id || null;
         const BID = parseInt(req.currentUserData.BID) || 0;
         if (!ObjectId.isValid(_id) || !BID) return httpResponse.fnPreConditionFailed(res);
@@ -418,7 +393,6 @@ const fnGetContact = async (req, res) => {
 //Delete Single Contact 
 const fnDeleteContact = async (req, res) => {
     try {
-        if (!req.currentUserData || !Object.keys(req.currentUserData).length === 0) return httpResponse.fnUnauthorized(res);
         const _id = req.query._id || null;
         const BID = parseInt(req.currentUserData.BID) || 0;
         if (!ObjectId.isValid(_id) || !BID) return httpResponse.fnPreConditionFailed(res);
@@ -433,7 +407,6 @@ const fnDeleteContact = async (req, res) => {
 //List Suggestion 
 const fnSuggestion = async (req, res) => {
     try {
-        if (!req.currentUserData || !Object.keys(req.currentUserData).length === 0) return httpResponse.fnUnauthorized(res);
         const BID = parseInt(req.currentUserData.BID) || 0;
         const type = req.query.type || null;
         const Z = req.query.Z || null;//Zone
@@ -456,7 +429,6 @@ const fnSuggestion = async (req, res) => {
 //Get Team 
 const fnGetTeam = async (req, res) => {
     try {
-        if (!req.currentUserData || !Object.keys(req.currentUserData).length === 0) return httpResponse.fnUnauthorized(res);
         const BID = parseInt(req.currentUserData.BID) || 0;
         // const type = req.query.t ype || null;
         const _loanId = req.query._loanId || null;
@@ -475,7 +447,6 @@ const fnGetTeam = async (req, res) => {
 //Adding Member to a Team 
 const fnAddTeamMember = async (req, res) => {
     try {
-        if (!req.currentUserData || !Object.keys(req.currentUserData).length === 0) return httpResponse.fnUnauthorized(res);
         const _loanId = req.body._loanId || null;
         const BID = parseInt(req.currentUserData.BID) || 0;//UUID
         delete req.body._loanId;
@@ -493,7 +464,6 @@ const fnAddTeamMember = async (req, res) => {
 //Adding Role 
 const fnAddRole = async (req, res) => {
     try {
-        if (!req.currentUserData || !Object.keys(req.currentUserData).length === 0) return httpResponse.fnUnauthorized(res);
         const BID = parseInt(req.currentUserData.BID) || 0;//UUID
         if (!BID) return httpResponse.fnPreConditionFailed(res);
         // Add role 
@@ -515,7 +485,6 @@ const fnAddRole = async (req, res) => {
 //List Role 
 const fnListRole = async (req, res) => {
     try {
-        if (!req.currentUserData || !Object.keys(req.currentUserData).length === 0) return httpResponse.fnUnauthorized(res);
         const BID = parseInt(req.currentUserData.BID) || 0;
         if (!BID) return httpResponse.fnPreConditionFailed(res);
         const data = await aes.fnEncryptAES(await mongoOps.fnFind(roleSchema, { BID }));
@@ -529,7 +498,6 @@ const fnListRole = async (req, res) => {
 const fnAddRating = async (req, res) => {
     try {
 
-        if (!req.currentUserData || !Object.keys(req.currentUserData).length === 0) return httpResponse.fnUnauthorized(res);
         const _loanId = req.body._loanId || null
         if (!ObjectId.isValid(_loanId)) return httpResponse.fnConflict(res);
         // Add Rating
@@ -547,7 +515,6 @@ const fnAddRating = async (req, res) => {
 //List Rating 
 const fnListRating = async (req, res) => {
     try {
-        if (!req.currentUserData || !Object.keys(req.currentUserData).length === 0) return httpResponse.fnUnauthorized(res);
         const BID = parseInt(req.currentUserData.BID) || 0;
         const _loanId = req.query._loanId || null;
         if (!ObjectId.isValid(_loanId) || !BID) return httpResponse.fnConflict(res);
@@ -559,28 +526,166 @@ const fnListRating = async (req, res) => {
     }
 }
 
-const fnUploadTest = async (req, res) => {
-    try {
-        // return null;
-        logger.debug('fnUploadTest', req.currentUserData)
-        if (!req.currentUserData || !Object.keys(req.currentUserData).length === 0) return httpResponse.fnUnauthorized(res);
-        const BID = parseInt(req.currentUserData.BID) || 0;
-        const dynamicStorage = storage1;//req.body.useStorage2 ? storage2 : storage1;
-        let uploadMiddleware = multer({ storage: dynamicStorage }).array('file');
-        // Call the upload middleware
-        uploadMiddleware(req, res, (err) => {
-            if (err) return httpResponse.fnConflict(res);
-            // logger.debug(req.currentUserData, req.files, req.body);
-            // if (req.body.data) req.body.data = helper.fnParseJSON(req.body.data)
-            // req.body = await aes.fnDecryptAES(req.body.data)
-            // logger.debug(req.body);
-            // logger.debug('filename',file, req.body);
+//Tranaction Documents
+const fnUploadTD = async (req, res) => {
+    _uploadMiddleware(req, res, async (err) => {
+        try {
+            const BID = parseInt(req.currentUserData.BID) || 0;
+            // delete req.body.LOC
+            const _loanId = req.body._loanId || null;
+            // delete req.body.SN;
+
+            let selectedDocsSchema;
+            if (SN == 'TD') selectedDocsSchema = transactionSchema
+            if (!ObjectId.isValid(_loanId) || !selectedDocsSchema || !BID) return httpResponse.fnConflict(res);
+            // await mongoOps.fnInsertOne(selectedDocsSchema, { BID, ...req.body, Docs: req.files });
+            if (err) {
+                logger.warn('Error uploading files:', err);
+                return httpResponse.fnConflict(res);;
+            }
+
+            // if (!req.files || req.files.length === 0) {
+            //     logger.warn('No files uploaded');
+            //     return httpResponse.fnConflict(res);;
+            // }
             return httpResponse.fnSuccess(res);
+        } catch (error) {
+            logger.warn('fnUploadTD ', error);
+            if (error.code === 11000) return httpResponse.fnUnprocessableContent(res);//MongoDB DuplicateKey error
+            else return httpResponse.fnBadRequest(res);
+        }
+    });
+    return null;
+    // return httpResponse.fnSuccess(res);
+
+};
+
+const fnUpdateTD = async (req, res) => {
+    _uploadMiddleware(req, res, async (err) => {
+        try {
+            const BID = parseInt(req.currentUserData.BID) || 0;
+            const sessionName = req.body.LOC.split("/")[1] || null;
+            const folderName = req.body.LOC.split("/")[2] || null;
+            const _id = req.body._id || null;
+            let selectedDocsSchema = transactionSchema;
+
+            if (sessionName == 'TD') selectedDocsSchema = transactionSchema
+            if (!ObjectId.isValid(_id) || !selectedDocsSchema || !BID || !folderName || !sessionName) return httpResponse.fnConflict(res);
+
+            // await mongoOps.fnFindOneAndUpdate(selectedDocsSchema, { BID, _id: new ObjectId(_id) }, { ...req.body, $push: { Docs: { $each: req.files } } }, { new: true, lean: true });
+            if (err) {
+                logger.warn('Error uploading files:', err);
+                return null;
+            }
+
+            if (!req.files || req.files.length === 0) {
+                logger.warn('No files', req.body)
+                return null;
+            }
+            return httpResponse.fnSuccess(res);
+        } catch (error) {
+            logger.warn('fnUpdateTD ', error);
+            return httpResponse.fnBadRequest(res);
+        }
+    });
+    return null;
+
+};
+
+const fnViewDocs = async (req, res) => {
+    try {
+        const filepath = path.join(__dirname, '..', `public/docs/${req.currentUserData.BID}/${req.query.LOC}`);
+        logger.debug('Reading file ....', fs.existsSync(filepath), filepath)
+        if (fs.existsSync(filepath)) return res.sendFile(filepath);
+        else return httpResponse.fnConflict(res);
+    } catch (error) {
+        logger.warn('fnViewDocs', error);
+        return httpResponse.fnBadRequest(res);
+    }
+
+}
+
+const fnDownloadDocs = async (req, res) => {
+    try {
+        const filepath = path.join(__dirname, '..', `public/docs/${req.currentUserData.BID}/${req.query.LOC}`);
+        logger.debug('Downloading file  ....', fs.existsSync(filepath), filepath);
+        if (fs.existsSync(filepath)) {
+            return res.download(filepath, (err) => {
+                if (err) {
+                    logger.warn('Error during file download', err);
+                    return httpResponse.fnBadRequest(res);
+                }
+            });
+        } else {
+            return httpResponse.fnConflict(res);
+        }
+    } catch (error) {
+        logger.warn('fnDownloadDocs', error);
+        return httpResponse.fnBadRequest(res);
+    }
+};
+
+const fnListDocs = async (req, res) => {
+    try {
+        if (!req.query.LOC) return httpResponse.fnConflict(res);
+        const filepath = path.join(__dirname, '..', `public/docs/${req.currentUserData.BID}/${req.query.LOC}`);
+        logger.debug('List All file ....', filepath)
+        // Read all files in the directory
+        fs.readdir(filepath, async (err, files) => {
+            if (err) return httpResponse.fnConflict(res);
+            // const data = await aes.fnEncryptAES({ files });
+            // return httpResponse.fnSuccess(res, data);
+            return httpResponse.fnSuccess(res, { files });
         });
         return null;
     } catch (error) {
-        logger.warn('fnUploadTest ', error);
+        logger.warn('fnListDocs', error);
         return httpResponse.fnBadRequest(res);
+    }
+}
+
+const fnListDocsDetail = async (req, res) => {
+    try {
+        const BID = parseInt(req.currentUserData.BID) || 0;
+        const _loanId = req.query._loanId || null;
+        const SN = req.query.SN || '';
+        if (!ObjectId.isValid(_loanId) || !SN) return httpResponse.fnPreConditionFailed(res);
+        let selectedDocsSchema;
+        if (SN == 'TD') selectedDocsSchema = transactionSchema
+        if (!selectedDocsSchema) return httpResponse.fnConflict(res);
+        const DocsDetail = await mongoOps.fnFind(selectedDocsSchema, { BID, _loanId: new ObjectId(_loanId) }, { __v: 0 })
+        const data = await aes.fnEncryptAES(DocsDetail)
+        return httpResponse.fnSuccess(res, data);
+    } catch (error) {
+        logger.warn('fnListDocsDetail', error);
+        return httpResponse.fnBadRequest(res);
+    }
+}
+
+const fnDeleteDocs = async (req, res) => {
+    try {
+        const localLOC = `public/docs/${req.currentUserData.BID}/${req.query.LOC}`
+        const filepath = path.join(__dirname, '..', localLOC);
+        if (fs.existsSync(filepath)) {
+            const stat = fs.statSync(filepath);
+            if (stat.isFile()) {
+                const result = await mongoOps.fnFindOne(
+                    transactionSchema,
+                    { BID: req.currentUserData.BID, 'Docs.path': localLOC }
+                );
+                logger.debug('Deleting File .....', filepath, result, { BID: req.currentUserData.BID, 'Docs.path': localLOC });
+                // return result;
+                // fs.unlinkSync(filepath); // Delete only the file
+                return httpResponse.fnSuccess(res, result);
+            } else {
+                return httpResponse.fnConflict(res); // Specified path is a directory, not a file
+            }
+        } else {
+            return httpResponse.fnPreConditionFailed(res); // File not found
+        }
+    } catch (error) {
+        console.error('fnDeleteDocs error:', error);
+        return res.status(400).send('Bad Request');
     }
 };
 
@@ -611,7 +716,13 @@ module.exports = {
     fnListRole,
     fnAddRating,
     fnListRating,
-    fnUploadTest
+    fnUploadTD,
+    fnListDocs,
+    fnListDocsDetail,
+    fnUpdateTD,
+    fnViewDocs,
+    fnDownloadDocs,
+    fnDeleteDocs
 }
 
 const _sendEmail = async (options) => {
@@ -662,3 +773,10 @@ const _fnGetModulePermission = async (_userId = null, moduleName = null, action 
     // return true;
     // return false;
 }
+
+
+const _fnDecryptFileData = async (data) => {
+    return await aes.fnDecryptAES(data)
+
+}
+

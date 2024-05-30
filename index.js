@@ -29,9 +29,29 @@ const { fnConfigureSocketIO } = require('./config/socketConfig');
     try {
         const app = express();
 
-        app.use(express.json());
-        app.use(express.urlencoded({ extended: true }));
+        app.use(express.urlencoded({ extended: true }));//Middleware to parse URL-encoded data
+        app.use(express.json());//Middleware to parse JSON data
 
+        // Trust proxy to handle headers correctly
+        // app.set('trust proxy', 1);
+
+        // const allowedOrigins = ["http://127.0.0.1"];
+
+        // // Define CORS options
+        // const corsOptions = {
+        //     origin: function (origin, callback) {
+        //         console.log("Origin:", origin); // Log the origin value
+        //         if (allowedOrigins.indexOf(origin) !== -1 || !origin) {
+        //             // Allow requests with a matching origin or if origin is undefined (e.g., from server-side)
+        //             callback(null, true);
+        //         } else {
+        //             // Disallow requests with origins not in the allowedOrigins 
+        //             callback(new Error('Not allowed by CORS'));
+        //         }
+        //     }
+        // };
+
+        // Use the CORS middleware with custom options
         app.use(cors());
         // Use maintenance middleware for all routes
         app.use(fnMaintenancesCheck);
@@ -53,8 +73,7 @@ const { fnConfigureSocketIO } = require('./config/socketConfig');
                         reconnectionDelay: 1000, // Delay between reconnection attempts (in milliseconds)
                         // reconnectionAttempts: 3, // Number of reconnection attempts
                         cors: {
-                            // origin: ["http://localhost:5173", "http://192.168.1.9:3000", "https://dms-site.vercel.app/"]//"http://192.168.1.6:3000"]//Frontend ip
-                            origin: ["https://dms-site.vercel.app/"]//"http://192.168.1.6:3000"]//Frontend ip
+                            origin: ["https://dms-site.vercel.app/"]
                         }
                     });
                     //socket fnMaintenancesCheck
