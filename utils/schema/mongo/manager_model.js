@@ -1,20 +1,15 @@
 'use strict'
 /**
- * users_model.js:User Detail
+ * manager_model.js:manager Detail
  * Developer:Santosh Dubey
  * 
  */
 const mongoose = require('mongoose');
-const user = new mongoose.Schema({
+const managerUser = new mongoose.Schema({
     E: {
         type: String,
         required: true,
         unique: true,
-        trim: true
-    },
-    P: {
-        type: String,
-        required: true,
         trim: true
     },
     N: {
@@ -22,20 +17,8 @@ const user = new mongoose.Schema({
         required: true,
         trim: true
     },
-    R: {
-        type: String,
-        trim: true
-    },
-    M: {
-        type: Number,
-        trim: true
-    },
-    TKN: {
-        type: String,
-        trim: true
-    },
     RM: {
-        type: Object,
+        type: String,
         required: true,
         trim: true
     },
@@ -54,14 +37,7 @@ const user = new mongoose.Schema({
         type: Number,
         required: true,
     },
-    UP: {
-        type: Object,
-        required: true,
-    },
-    _adminId: {
-        type: mongoose.Schema.Types.ObjectId,
-        ref: 'admins_model'
-    }
+
 }, {
     timestamps: true
 }
@@ -69,7 +45,7 @@ const user = new mongoose.Schema({
 
 
 
-module.exports = mongoose.model('users_model', user);
+module.exports = mongoose.model('manager_model', managerUser);
 
 /**
  * 

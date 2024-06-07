@@ -8,25 +8,36 @@ const mongoose = require('mongoose');
 
 const complianceSchema = new mongoose.Schema({
     BID: { type: Number, required: true },
-    N: { type: Number, required: true, unique: true },
     P: { type: Number, required: true },
     SD: { type: Date, required: true },
     ED: { type: Date, required: true },
-    EL: { type: String, required: true },
-    PL: { type: String, required: true },
+    EL: { type: String },
+    PL: { type: String },
+    N: { type: String, required: true, trim: true },
+    C: { type: Number, required: true },
+    FD: {
+        N: { type: String, trim: true },
+        P: { type: String, trim: true },
+        S: { type: Number, trim: true },
+    },
+    S: {
+        type: Number,
+        required: true,
+        trim: true,
+        default: 1
+    },
     _loanId: {
         type: mongoose.Schema.Types.ObjectId,
         ref: 'loan_model',
         required: true
     },
-    Docs: { type: Array, required: true },
 },
     {
         timestamps: true
     }
 );
 
-module.exports = mongoose.model('cd_model', complianceSchema);
+module.exports = mongoose.model('compliance_model', complianceSchema);
 
 /**
  * 

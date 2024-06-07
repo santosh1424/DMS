@@ -43,10 +43,7 @@ const fnAuthenticateToken = async (req, res, next) => {
 }
 const fnFileData = async (req, res, next) => {
     try {
-        if (!req.query.LOC) return httpResponse.fnPreConditionFailed(res);
-        logger.debug('Uploading file too..', req.query.LOC);
-        const dynamicStorage = fnAllInStorage;
-        const uploadMiddleware = multer({ storage: dynamicStorage }).array('file');
+        const uploadMiddleware = multer({ storage: fnAllInStorage }).array('file');
 
         uploadMiddleware(req, res, (err) => {
             if (err) {
@@ -130,23 +127,41 @@ const adminAddVaildate = [
     check("P", "Password is Required").not().isEmpty().trim(),
     check("MU", "MU is Required").not().isEmpty().isInt(),
 ];
+const addDocsDetails = [
+    check("_loanId", "loanId is Required").not().isEmpty().trim(),
+    check("N", "Name is Required").not().isEmpty().trim(),
+    check("P", "Priority is Required").not().isEmpty().isInt(),
+    check("SD", "StartDate is Required").not().isEmpty().trim(),
+    check("ED", "EndDate is Required").not().isEmpty().trim(),
+];
+const editDocsDetails = [
+    check("_id", "_id is Required").not().isEmpty().trim(),
+];
 const userAddVaildate = [
     check("N", "Name is Required").not().isEmpty().trim(),
     check("R", "Role is Required").not().isEmpty().trim(),
+    check("Z", "Zone is Required").not().isEmpty().trim(),
     check("E", "Email is Required").not().isEmpty().trim(),
+    check("UP", "User Premission is Required").not().isEmpty().trim(),
     check("P", "Password is Required").not().isEmpty().trim(),
 ];
-const teamMembersAddVaildate = [
-    // check("N", "Name is Required").not().isEmpty().trim(),
-    // check("R", "Role is Required").not().isEmpty().trim(),
-    // check("E", "Email is Required").not().isEmpty().trim(),
-    check("_loanId", "loanId is Required").not().isEmpty().trim(),
-    // check("AID", "AID is Required").not().isEmpty().trim(),
-    // check("BID", "BID is Required").not().isEmpty().trim(),
+const teamAddVaildate = [
+    check("N", "Name is Required").not().isEmpty().trim(),
+    check("L", "Lead is Required").not().isEmpty(),
+    check("TD", "TD is Required").not().isEmpty(),
+    check("CD", "CD is Required").not().isEmpty(),
+    check("C", "C is Required").not().isEmpty(),
+    check("CS", "CS is Required").not().isEmpty(),
+    check("CP", "CP is Required").not().isEmpty(),
+    // check("_loanId", "loanId is Required").not().isEmpty().trim(),
 ];
 const roleVaildate = [
     check("N", "Name is Required").not().isEmpty().trim(),
     check("P", "Permission is Required").not().isEmpty().trim()
+];
+const mstVaildate = [
+    check("N", "Name is Required").not().isEmpty().trim(),
+    check("v", "Value is Required").not().isEmpty().trim()
 ];
 const ratingVaildate = [
     check("A", "Agency is Required").not().isEmpty().isInt(),
@@ -208,11 +223,14 @@ module.exports = {
     createContactVaildate,
     roleVaildate,
     ratingVaildate,
-    teamMembersAddVaildate,
+    teamAddVaildate,
     fnMaintenancesCheck,
     // fnCheckPermission
     fnGetPermission,
     fnTD,
     fnFileData,
-    uploadDocsVaildate
+    uploadDocsVaildate,
+    addDocsDetails,
+    mstVaildate,
+    editDocsDetails
 }

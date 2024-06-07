@@ -8,21 +8,32 @@ const mongoose = require('mongoose');
 
 const covenantsSchema = new mongoose.Schema({
     BID: { type: Number, required: true },
-    N: { type: Number, required: true, unique: true },
+    N: { type: String, required: true, trim: true },
+    C: { type: Number, required: true },
+    FD: {
+        N: { type: String, trim: true },
+        P: { type: String, trim: true },
+        S: { type: Number, trim: true },
+    },
+    S: {
+        type: Number,
+        required: true,
+        trim: true,
+        default: 1
+    },
     T: { type: Number, required: true },
-    F: { type: Number, required: true },
+    F: { type: Number },
     P: { type: Number, required: true },
     SD: { type: Date, required: true },
     ED: { type: Date, required: true },
-    EL: { type: String, required: true },
-    PL: { type: String, required: true },
-    D: { type: String, required: true },
+    EL: { type: String },
+    PL: { type: String },
+    D: { type: String },
     _loanId: {
         type: mongoose.Schema.Types.ObjectId,
         ref: 'loan_model',
         required: true
     },
-    Docs: { type: Array, required: true },
 },
     {
         timestamps: true

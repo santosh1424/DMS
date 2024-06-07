@@ -59,6 +59,10 @@ const loanSchema = new mongoose.Schema({
             match: /^[A-Z]{4}\d{7}$/                // IFSC format validation (4 letters followed by 7 digits) Indian Financial System Code (IFSC)
         }
     },
+    _teamId: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'team_model'
+    }
 
 }, {
     timestamps: true
