@@ -161,7 +161,10 @@ const fnAddUser = async (req, res) => {
 //Edit BasicUser 
 const fnEditUser = async (req, res) => {
     try {
-        // req.body = helper.fnParseJSON(req.body)
+        // req.body = helper.fnParseJSON(req.body)\
+        const BID = parseInt(req.currentUserData.BID) || 0;//UUID
+        const _id = req.body._id || null;
+        if (!ObjectId.isValid(_id) || !BID) return httpResponse.fnPreConditionFailed(res);
         const updateUser = {}
         if (req.body.P) updateUser.P = await bcrypt.hash(req.body.P, 10);
         if (req.body.S) updateUser.S = parseInt(req.body.S);
@@ -169,7 +172,7 @@ const fnEditUser = async (req, res) => {
         if (req.body.R) updateUser.R = req.body.R;
         req.body.BID = parseInt(req.currentUserData.BID);
         // Edit User
-        await mongoOps.fnFindOneAndUpdate(userSchema, { BID: req.currentUserData.BID, E: req.currentUserData.E }, updateUser)
+        await mongoOps.fnFindOneAndUpdate(userSchema, { BID, _id: new ObjectId(_id) }, updateUser)
         return httpResponse.fnSuccess(res);
     } catch (error) {
         logger.warn('fnEditUser', error)
@@ -266,7 +269,7 @@ const fnVerifyOTP = async (req, res) => {
             //User Status and TKN
             const updateUserTKN = await mongoOps.fnFindOneAndUpdate(userSchema, { E: email }, { S: 2, TKN });
             await redisClient.hmset(redisKeys.fnUserKey(BID, updateUserTKN._id), await redisSchema.fnSetUserSchema(updateUserTKN));
-            const data = await aes.fnEncryptAES(TKN);
+            const data = await aes.fnEncryptAES({ TKN: TKN });
             logger.debug("||Verified||", email, _userId)
             return httpResponse.fnSuccess(res, data);
         } else return httpResponse.fnPreConditionFailed(res);// OTP is Invalid
@@ -439,6 +442,7 @@ const fnSuggestion = async (req, res) => {
         else if (type == 'TT') data = await mongoOps.fnFind(userSchema, { BID, RM }, { N: 1, E: 1, _id: 0 }) //Team Team Assingment 
         else if (type == 'AU') data = await mongoOps.fnFind(userSchema, { BID }, { N: 1, E: 1, _id: 0 }) //ALL User
         // logger.debug('suggtion', type, data, { BID, Z })
+        logger.debug('fnSuggestion', BID, data)
         data = await aes.fnEncryptAES(data);
         return httpResponse.fnSuccess(res, data);
     } catch (error) {
@@ -849,14 +853,24 @@ const fnDeleteDocs = async (req, res) => {
     }
 };
 
-const fnTestTeam = async (req, res) => {
+const fnAssignListDocsDetail = async (req, res) => {
     try {
         const email = req.currentUserData.E;
+        const sessionName = req.query.SN;
+        let selectedDocsSchemaName;
+        if (!email || !sessionName) return httpResponse.fnConflict(res);
+        logger.debug(email, sessionName)
+        if (sessionName == 'TD') selectedDocsSchemaName = "transaction_models";
+        else if (sessionName == 'CD') selectedDocsSchemaName = "compliance_models";
+        else if (sessionName == 'C') selectedDocsSchemaName = "covenants_models";
+        else if (sessionName == 'CP') selectedDocsSchemaName = "precedent_models";
+        else if (sessionName == 'CS') selectedDocsSchemaName = "subsequent_models";
         const query = [
             {
                 $match: {
                     $expr: {
                         $or: [
+                            { $eq: ["$L", email] },
                             { "$in": [email, "$TD.M"] },
                             { "$in": [email, "$TD.C"] },
                             { "$in": [email, "$CD.M"] },
@@ -866,7 +880,7 @@ const fnTestTeam = async (req, res) => {
                             { "$in": [email, "$CP.M"] },
                             { "$in": [email, "$CP.C"] },
                             { "$in": [email, "$CS.M"] },
-                            { "$in": [email, "$TD.C"] }
+                            { "$in": [email, "$CS.C"] }
                         ]
                     }
                 }
@@ -874,8 +888,8 @@ const fnTestTeam = async (req, res) => {
             {
                 $lookup: {
                     from: "loan_models",
-                    localField: "_loanId",
-                    foreignField: "_id",
+                    localField: "_id",
+                    foreignField: "_teamId",
                     as: "loanDetails"
                 }
             },
@@ -884,8 +898,8 @@ const fnTestTeam = async (req, res) => {
             },
             {
                 $lookup: {
-                    from: "transaction_models",
-                    localField: "_loanId",
+                    from: selectedDocsSchemaName,
+                    localField: "loanDetails._id",
                     foreignField: "_loanId",
                     as: "docsDetails"
                 }
@@ -895,11 +909,13 @@ const fnTestTeam = async (req, res) => {
             },
             {
                 $project: {
-                    _loanId: 1,
+                    _id: 1,
+                    L: 1,
+                    N: 1,
+                    _loanId: "$loanDetails._id",
                     AID: "$loanDetails.AID",
                     CN: "$loanDetails.CN",
                     SD: "$loanDetails.SD",
-                    _id: 0,
                     S: "$docsDetails.S"
                 }
             },
@@ -919,21 +935,19 @@ const fnTestTeam = async (req, res) => {
                     },
                     details: {
                         $push: {
-                            // AID: "$AID",
-                            S: "$S",
-                            // N: "$N",
-                            // SD: "$SD"
+                            S: "$S"
                         }
                     }
                 }
             }
         ];
-        const output = await mongoOps.fnAggregate(teamSchema, query);
-        logger.debug(helper.fnStringlyJSON(query))
-        return httpResponse.fnSuccess(res, output);
+        logger.debug(helper.fnStringlyJSON(query));
+        let output = await mongoOps.fnAggregate(teamSchema, query);
+        const data = await aes.fnEncryptAES(output);
+        return httpResponse.fnSuccess(res, data);
         // return output;
     } catch (error) {
-        return logger.warn('fnTestTeam', error);
+        return logger.warn('fnAssignListDocsDetail', error);
     }
 }
 
@@ -978,7 +992,7 @@ module.exports = {
     fnAddMST,
     fnListMST,
     fnEditMST,
-    fnTestTeam
+    fnAssignListDocsDetail
 }
 
 const _sendEmail = async (options) => {

@@ -18,7 +18,7 @@ const managerUser = new mongoose.Schema({
         trim: true
     },
     RM: {
-        type: String,
+        type: Object,
         required: true,
         trim: true
     },

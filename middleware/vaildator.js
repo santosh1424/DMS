@@ -30,6 +30,7 @@ const fnAuthenticateToken = async (req, res, next) => {
         data = await aes.fnDecryptAES(data);
         // Verify token
         jwt.verify(data.TKN, constants.SECRET_KEY, (err, decoded) => {
+            if (!data.TKN) return httpResponse.fnPreConditionFailed(res);
             if (err) return httpResponse.fnConflict(res);
             //add decoded token in request
             req.currentUserData = decoded || null;

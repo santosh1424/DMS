@@ -71,7 +71,7 @@ router.get('/listDocsDetail', validate.fnAuthenticateToken, allinOneController.f
 router.get('/viewDocs', validate.fnAuthenticateToken, allinOneController.fnViewDocs);
 router.delete('/deleteDocs', validate.fnAuthenticateToken, allinOneController.fnDeleteDocs);
 router.get('/downloadDocs', validate.fnAuthenticateToken, allinOneController.fnDownloadDocs);
-router.get('/testTeam', validate.fnAuthenticateToken, allinOneController.fnTestTeam);
+router.get('/assignlistDocsDetail', validate.fnAuthenticateToken, allinOneController.fnAssignListDocsDetail);
 
 
 module.exports = router

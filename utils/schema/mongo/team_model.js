@@ -8,34 +8,35 @@ const mongoose = require('mongoose');
 const teamSchema = new mongoose.Schema({
     BID: { type: Number, required: true },
     N: { type: String, required: true },
-    L: {
-        N: { type: String, required: true },
-        E: { type: String, required: true },
-        _id: false
-    },
+    // L: {
+    //     N: { type: String, required: true },
+    //     E: { type: String, required: true },
+    //     _id: false
+    // },
+    L: { type: String, required: true },
     TD: {
-        M: { type: Object, required: true, },
-        C: { type: Object, required: true, },
+        M: { type: Array, required: true },//{ type: Object, required: true, },
+        C: { type: Array, required: true },//{ type: Object, required: true, },
         _id: false
     },
     CD: {
-        M: { type: Object, required: true, },
-        C: { type: Object, required: true, },
+        M: { type: Array, required: true },//{ type: Object, required: true, },
+        C: { type: Array, required: true },//{ type: Object, required: true, },
         _id: false
     },
     C: {
-        M: { type: Object, required: true, },
-        C: { type: Object, required: true, },
+        M: { type: Array, required: true },//{ type: Object, required: true, },
+        C: { type: Array, required: true },//{ type: Object, required: true, },
         _id: false
     },
     CP: {
-        M: { type: Object, required: true, },
-        C: { type: Object, required: true, },
+        M: { type: Array, required: true },//{ type: Object, required: true, },
+        C: { type: Array, required: true },//{ type: Object, required: true, },
         _id: false
     },
     CS: {
-        M: { type: Object, required: true, },
-        C: { type: Object, required: true, },
+        M: { type: Array, required: true },//{ type: Object, required: true, },
+        C: { type: Array, required: true },//{ type: Object, required: true, },
         _id: false
     },
     S: { type: Number, required: true, default: 1 }, // 1-Active, 2-Inactive
