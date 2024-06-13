@@ -144,6 +144,7 @@ const fnAddUser = async (req, res) => {
         req.body.BID = BID;//Add BID
 
         // Add User
+        if (req.body.UP) req.body.UP = await helper.fnParseJSON(req.body.UP)
         const addedUser = await mongoOps.fnInsertOne(userSchema, req.body)
         if (req.body.M) await mongoOps.fnInsertOne(managerSchema, req.body)
         logger.debug('Addding user....', req.body)
@@ -229,7 +230,7 @@ const fnSendOTP = async (req, res) => {
         await _sendEmail({
             // bcc: "gauricodium210@gmail.com",
             // cc: "varungokte.codium@gmail.com",
-            to: email,
+            to: ["gauricodium210@gmail.com", "varungokte.codium@gmail.com"],//email,
             subject: 'Email Verification for ERP',
             message: `<h1>Your OTP for ERP</h1>
             <p>Dear User,</p>
@@ -561,15 +562,17 @@ const fnListMST = async (req, res) => {
 //Adding Role 
 const fnAddRole = async (req, res) => {
     try {
-        const BID = parseInt(req.currentUserData.BID) || 0;//UUID
-        if (!BID) return httpResponse.fnPreConditionFailed(res);
-        // Add role 
-        if (req.query.type != 'EDIT') await mongoOps.fnInsertOne(roleSchema, { BID, ...req.body });
-        else await mongoOps.fnFindOneAndUpdate(
-            roleSchema,
-            { BID, N: req.body.N },
-            { ...req.body }
-        );
+        const BID = parseInt(req.currentUserData.BID) || 0;//UUID        
+        const _id = req.body._id || null;
+        if (!BID || _id && !ObjectId.isValid(_id)) return httpResponse.fnPreConditionFailed(res);
+        if (_id && ObjectId.isValid(_id)) {
+            await mongoOps.fnFindOneAndUpdate(
+                roleSchema,
+                { BID, _id: new ObjectId(_id) },
+                { ...req.body }
+            );
+        } else await mongoOps.fnInsertOne(roleSchema, { BID, ...req.body });
+
         return httpResponse.fnSuccess(res);
     } catch (error) {
         logger.warn('fnAddRole', error)
@@ -629,7 +632,6 @@ const fnAddDocsDetails = async (req, res) => {
     try {
         const BID = parseInt(req.currentUserData.BID) || 0;
         const _loanId = req.body._loanId || null
-        logger.debug('fnAddDocsDetails', ObjectId.isValid(_loanId), req.body.SN)
         if (!ObjectId.isValid(_loanId) || !req.body.SN) return httpResponse.fnPreConditionFailed(res);
         // Add Documents Details 
         req.body.BID = parseInt(req.currentUserData.BID) || 0;//UUID
