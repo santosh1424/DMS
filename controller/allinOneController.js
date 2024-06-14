@@ -104,13 +104,13 @@ const fnLogin = async (req, res) => {
         const isPasswordValid = await bcrypt.compare(req.body.P, user.P);
 
         if (!isPasswordValid) return httpResponse.fnPreConditionFailed(res);
-        else if (user.S == 3) return httpResponse.fnConflict(res);
+        else if (user.S == "unverfied") return httpResponse.fnConflict(res);
         //Create a new TKN
         const TKN = await jwt.sign({
             E: user.E,
             N: user.N,
             BID: user.BID,
-            S: user.S || 0,
+            S: user.S || 'N/A',
             _userId: user._id
         }, constants.SECRET_KEY);
 
@@ -168,7 +168,7 @@ const fnEditUser = async (req, res) => {
         if (!ObjectId.isValid(_id) || !BID) return httpResponse.fnPreConditionFailed(res);
         const updateUser = {}
         if (req.body.P) updateUser.P = await bcrypt.hash(req.body.P, 10);
-        if (req.body.S) updateUser.S = parseInt(req.body.S);
+        if (req.body.S) updateUser.S = req.body.S;
         if (req.body.N) updateUser.N = req.body.N;
         if (req.body.R) updateUser.R = req.body.R;
         req.body.BID = parseInt(req.currentUserData.BID);
@@ -230,7 +230,7 @@ const fnSendOTP = async (req, res) => {
         await _sendEmail({
             // bcc: "gauricodium210@gmail.com",
             // cc: "varungokte.codium@gmail.com",
-            to: ["gauricodium210@gmail.com", "varungokte.codium@gmail.com"],//email,
+            to: email,
             subject: 'Email Verification for ERP',
             message: `<h1>Your OTP for ERP</h1>
             <p>Dear User,</p>
