@@ -9,8 +9,8 @@ const mongoose = require('mongoose');
 const transactionSchema = new mongoose.Schema({
     BID: { type: Number, required: true },
     N: { type: String, required: true, trim: true, },
-    C: { type: Number, required: true },
-    P: { type: Number, required: true },
+    C: { type: String, required: true },
+    P: { type: String, required: true },
     SD: { type: Date, required: true },
     ED: { type: Date, required: true },
     EL: { type: String, trim: true },
@@ -26,10 +26,11 @@ const transactionSchema = new mongoose.Schema({
         required: true
     },
     S: {
-        type: Number,
+        type: String,
         required: true,
         trim: true,
-        default: 1
+        enum: ['inprogress', 'complete', 'pending'],
+        default: 'inprogress'
     }
 },
     {

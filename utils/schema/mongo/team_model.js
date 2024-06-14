@@ -13,7 +13,7 @@ const teamSchema = new mongoose.Schema({
     //     E: { type: String, required: true },
     //     _id: false
     // },
-    L: { type: String, required: true },
+    L: { type: String, required: true },//Team Lead
     TD: {
         M: { type: Array, required: true },//{ type: Object, required: true, },
         C: { type: Array, required: true },//{ type: Object, required: true, },
@@ -39,7 +39,13 @@ const teamSchema = new mongoose.Schema({
         C: { type: Array, required: true },//{ type: Object, required: true, },
         _id: false
     },
-    S: { type: Number, required: true, default: 1 }, // 1-Active, 2-Inactive
+    S: {
+        type: String,
+        required: true,
+        trim: true,
+        enum: ['active', 'inactive'],
+        default: 'active'
+    },
     // _loanId: {
     //     type: mongoose.Schema.Types.ObjectId,
     //     ref: 'loan_model',
