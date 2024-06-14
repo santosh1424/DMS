@@ -131,7 +131,7 @@ const adminAddVaildate = [
 const addDocsDetails = [
     check("_loanId", "loanId is Required").not().isEmpty().trim(),
     check("N", "Name is Required").not().isEmpty().trim(),
-    check("P", "Priority is Required").not().isEmpty().isInt(),
+    check("P", "Priority is Required").not().isEmpty().trim(),
     check("SD", "StartDate is Required").not().isEmpty().trim(),
     check("ED", "EndDate is Required").not().isEmpty().trim(),
 ];
@@ -165,12 +165,12 @@ const mstVaildate = [
     check("v", "Value is Required").not().isEmpty().trim()
 ];
 const ratingVaildate = [
-    check("A", "Agency is Required").not().isEmpty().isInt(),
-    check("T", "Type is Required").not().isEmpty().isInt(),
+    check("A", "Agency is Required").not().isEmpty().trim(),
+    check("T", "Type is Required").not().isEmpty().trim(),
     check("DT", "Date is Required").not().isEmpty().trim(),
     check("O", "Outlook is Required").not().isEmpty().trim(),
     check("L", "Link is Required").not().isEmpty().trim(),
-    check("R", "Rating is Required").not().isEmpty().trim(),
+    check("V", "Value is Required").not().isEmpty().trim(),
     check("_loanId", "loanId is Required").not().isEmpty().trim(),
 ];
 const createLoanVaildate = [

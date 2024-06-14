@@ -104,13 +104,13 @@ const fnLogin = async (req, res) => {
         const isPasswordValid = await bcrypt.compare(req.body.P, user.P);
 
         if (!isPasswordValid) return httpResponse.fnPreConditionFailed(res);
-        else if (user.S == 3) return httpResponse.fnConflict(res);
+        else if (user.S == "unverfied") return httpResponse.fnConflict(res);
         //Create a new TKN
         const TKN = await jwt.sign({
             E: user.E,
             N: user.N,
             BID: user.BID,
-            S: user.S || 0,
+            S: user.S || 'N/A',
             _userId: user._id
         }, constants.SECRET_KEY);
 
@@ -144,6 +144,7 @@ const fnAddUser = async (req, res) => {
         req.body.BID = BID;//Add BID
 
         // Add User
+        if (req.body.UP) req.body.UP = await helper.fnParseJSON(req.body.UP)
         const addedUser = await mongoOps.fnInsertOne(userSchema, req.body)
         if (req.body.M) await mongoOps.fnInsertOne(managerSchema, req.body)
         logger.debug('Addding user....', req.body)
@@ -167,7 +168,7 @@ const fnEditUser = async (req, res) => {
         if (!ObjectId.isValid(_id) || !BID) return httpResponse.fnPreConditionFailed(res);
         const updateUser = {}
         if (req.body.P) updateUser.P = await bcrypt.hash(req.body.P, 10);
-        if (req.body.S) updateUser.S = parseInt(req.body.S);
+        if (req.body.S) updateUser.S = req.body.S;
         if (req.body.N) updateUser.N = req.body.N;
         if (req.body.R) updateUser.R = req.body.R;
         req.body.BID = parseInt(req.currentUserData.BID);
@@ -561,15 +562,17 @@ const fnListMST = async (req, res) => {
 //Adding Role 
 const fnAddRole = async (req, res) => {
     try {
-        const BID = parseInt(req.currentUserData.BID) || 0;//UUID
-        if (!BID) return httpResponse.fnPreConditionFailed(res);
-        // Add role 
-        if (req.query.type != 'EDIT') await mongoOps.fnInsertOne(roleSchema, { BID, ...req.body });
-        else await mongoOps.fnFindOneAndUpdate(
-            roleSchema,
-            { BID, N: req.body.N },
-            { ...req.body }
-        );
+        const BID = parseInt(req.currentUserData.BID) || 0;//UUID        
+        const _id = req.body._id || null;
+        if (!BID || _id && !ObjectId.isValid(_id)) return httpResponse.fnPreConditionFailed(res);
+        if (_id && ObjectId.isValid(_id)) {
+            await mongoOps.fnFindOneAndUpdate(
+                roleSchema,
+                { BID, _id: new ObjectId(_id) },
+                { ...req.body }
+            );
+        } else await mongoOps.fnInsertOne(roleSchema, { BID, ...req.body });
+
         return httpResponse.fnSuccess(res);
     } catch (error) {
         logger.warn('fnAddRole', error)
@@ -629,7 +632,6 @@ const fnAddDocsDetails = async (req, res) => {
     try {
         const BID = parseInt(req.currentUserData.BID) || 0;
         const _loanId = req.body._loanId || null
-        logger.debug('fnAddDocsDetails', ObjectId.isValid(_loanId), req.body.SN)
         if (!ObjectId.isValid(_loanId) || !req.body.SN) return httpResponse.fnPreConditionFailed(res);
         // Add Documents Details 
         req.body.BID = parseInt(req.currentUserData.BID) || 0;//UUID

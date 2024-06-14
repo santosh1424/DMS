@@ -36,20 +36,24 @@ const loanSchema = new mongoose.Schema({
     DSRA: {
         A: { type: String }, // DSRA Applicability
         F: { type: String }, // DSRA Form
-        S: { type: String }, // DSRA Status
+        S: {
+            type: String,
+            trim: true,
+            enum: ['yes', 'no']
+        },
         V: { type: Number } // DSRA Amount
     },
 
-    S: { type: Number, },//Share(%)
+    SP: { type: Number, },//Share Precentage 
     DV: { type: Date, },//Date of Valuation
     STV: {
-        T: { type: Number },//Security Type 
+        T: { type: String },//Security Type 
         V: { type: Number }//Security Value
     },
     BD: {
         AN: { type: String },// Account Name
         BAN: { type: String },     // Bank Account Number
-        AT: { type: Number },      // Account type                                    // Account Type
+        AT: { type: String },      // Account type                                
         LB: { type: String },      // Location of Branch
         BN: { type: String },      // Bank Name
         BA: { type: String },      // Branch Address
