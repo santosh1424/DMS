@@ -9,18 +9,15 @@ const mongoose = require('mongoose');
 const covenantsSchema = new mongoose.Schema({
     BID: { type: Number, required: true },
     N: { type: String, required: true, trim: true },
+    R: { type: String, required: true, trim: true, },
     C: { type: String, required: true },
-    // FD: {
-    //     N: { type: String, trim: true },
-    //     P: { type: String, trim: true },
-    //     S: { type: String, trim: true },
-    // },
+    FD: { type: Object, trim: true },
     S: {
         type: String,
         required: true,
         trim: true,
-        enum: ['inprogress', 'complete', 'pending'],
-        default: 'inprogress'
+        enum: ['Pending', 'In progress', 'Complete'],
+        default: 'Pending'
     },
     T: { type: String, required: true },
     F: { type: Number },

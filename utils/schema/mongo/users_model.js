@@ -48,8 +48,8 @@ const user = new mongoose.Schema({
         type: String,
         required: true,
         trim: true,
-        enum: ['unverified', 'active', 'inactive'],
-        default: 'unverified'
+        enum: ['Unverified', 'Active', 'Inactive'],
+        default: 'Unverified'
     },
     BID: {
         type: Number,

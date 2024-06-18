@@ -215,7 +215,7 @@ const fnListUser = async (req, res) => {
 
 const fnSendOTP = async (req, res) => {
     try {
-        if (parseInt(req.currentUserData.S) == 2) return httpResponse.fnPreConditionFailed(res);
+        if (req.currentUserData.S == "Active") return httpResponse.fnPreConditionFailed(res);
         const email = req.currentUserData.E;
         const otp = helper.fnRandomNumber(1000, 9999); // Generate a 6-digit OTP
         const otpKey = await redisKeys.fnOTPKey(req.currentUserData.BID, email)
@@ -264,11 +264,11 @@ const fnVerifyOTP = async (req, res) => {
                 E: email,
                 N: req.currentUserData.N,
                 BID,
-                S: 2,
+                S: "Active",
                 _userId
             }, constants.SECRET_KEY);
             //User Status and TKN
-            const updateUserTKN = await mongoOps.fnFindOneAndUpdate(userSchema, { E: email }, { S: 2, TKN });
+            const updateUserTKN = await mongoOps.fnFindOneAndUpdate(userSchema, { E: email }, { S: "Active", TKN });
             await redisClient.hmset(redisKeys.fnUserKey(BID, updateUserTKN._id), await redisSchema.fnSetUserSchema(updateUserTKN));
             const data = await aes.fnEncryptAES({ TKN: TKN });
             logger.debug("||Verified||", email, _userId)
@@ -471,14 +471,18 @@ const fnGetTeam = async (req, res) => {
 }
 
 //Adding Member to a Team 
-const fnAddTeam = async (req, res) => {
+const fnUpdateTeam = async (req, res) => {
     try {
         const BID = parseInt(req.currentUserData.BID) || 0;//UUID
-        let data = await mongoOps.fnInsertOne(teamSchema, { BID, ...req.body })
+        const _id = req.body._id || null;
+        let data;
+        if (_id && !ObjectId.isValid(_id)) return httpResponse.fnPreConditionFailed(res);
+        else if (_id) await mongoOps.fnFindOneAndUpdate(teamSchema, { BID, _id: new ObjectId(_id) }, { ...req.body });
+        else data = await mongoOps.fnInsertOne(teamSchema, { BID, ...req.body })
         data = await aes.fnEncryptAES(data);
         return httpResponse.fnSuccess(res, data);
     } catch (error) {
-        logger.warn('fnAddTeam', error)
+        logger.warn('fnUpdateTeam', error)
         if (error.code === 11000) return httpResponse.fnUnprocessableContent(res);//MongoDB DuplicateKey error
         else return httpResponse.fnBadRequest(res);
     }
@@ -716,10 +720,10 @@ const fnUploadTD = async (req, res) => {
             else if (sessionName == 'CP') { selectedDocsSchema = precedentSchema; }
             // const body = { $push: { FD: { $each: req.files }, $set: { S: 2 } } }
             const query = { BID, _id: new ObjectId(_id) };
-            const body = { S: 2, FD: req.files }
+            const body = { S: "In progress", FD: req.files }
 
             await mongoOps.fnFindOneAndUpdate(selectedDocsSchema, query, body);
-            logger.debug('Uploading file ......', LOC, _id)
+            logger.debug('Uploading file ......', LOC, _id, req.files)
 
             return httpResponse.fnSuccess(res);
         } catch (error) {
@@ -837,7 +841,7 @@ const fnDeleteDocs = async (req, res) => {
                 else if (sessionName == 'CP') { selectedDocsSchema = precedentSchema; }
 
                 const query = { BID, _id: new ObjectId(_id), 'FD.filename': filename };
-                const body = { $set: { S: 1 }, $unset: { FD: 1 } }
+                const body = { $set: { S: "Pending" }, $unset: { FD: 1 } }
 
                 logger.debug('Deleting Docs ....', filepath, _id)
                 await mongoOps.fnFindOneAndUpdate(selectedDocsSchema, query, body);
@@ -975,7 +979,7 @@ module.exports = {
     fnListLoan,
     fnSuggestion,
     fnGetTeam,
-    fnAddTeam,
+    fnUpdateTeam,
     fnSelectTeam,
     fnListTeam,
     fnAddRole,
