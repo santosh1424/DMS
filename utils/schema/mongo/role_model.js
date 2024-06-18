@@ -14,17 +14,18 @@ const roleSchema = new mongoose.Schema({
         trim: true
     },
     S: {
-        type: Number,
+        type: String,
         required: true,
         trim: true,
-        default: 1
+        enum: ['active', 'inactive'],
+        default: 'active'
     },
     BID: {
         type: Number,
         required: true,
     },
-    P:{
-        type:Object,
+    P: {
+        type: Object,
         required: true,
     }
 }, {

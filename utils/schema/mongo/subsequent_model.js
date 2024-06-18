@@ -9,20 +9,18 @@ const mongoose = require('mongoose');
 const subsequentSchema = new mongoose.Schema({
     BID: { type: Number, required: true },
     N: { type: String, required: true, trim: true },
-    C: { type: Number, required: true },
-    FD: {
-        N: { type: String, trim: true },
-        P: { type: String, trim: true },
-        S: { type: Number, trim: true },
-    },
+    R: { type: String, required: true, trim: true, },
+    C: { type: String, required: true },
+    FD: { type: Object, trim: true },
     S: {
-        type: Number,
+        type: String,
         required: true,
         trim: true,
-        default: 1
+        enum: ['Pending', 'In progress', 'Complete'],
+        default: 'Pending'
     },
     D: { type: String },
-    P: { type: Number, required: true },
+    P: { type: String, required: true },
     SD: { type: Date, required: true },
     ED: { type: Date, required: true },
     EL: { type: String },

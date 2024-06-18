@@ -8,11 +8,11 @@ const mongoose = require('mongoose');
 
 const ratingSchema = new mongoose.Schema({
     A: {
-        type: Number,
+        type: String,
         required: true
     },
     T: {
-        type: Number,
+        type: String,
         required: true
     },
     DT: {
@@ -20,14 +20,14 @@ const ratingSchema = new mongoose.Schema({
         required: true
     },
     O: {
-        type: Number,
+        type: String,
         required: true
     },
     L: {
         type: String,
         required: true
     },
-    R: {
+    V: {
         type: String,
         required: true
     },
@@ -65,7 +65,7 @@ module.exports = mongoose.model('rating_model', ratingSchema);
  *      2- Stable
  *      3- Negative
  * L-link (URL)
- * R-Rating
+ * V -value of Rating
  * 
  * 
  * 

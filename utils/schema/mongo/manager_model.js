@@ -23,15 +23,16 @@ const managerUser = new mongoose.Schema({
         trim: true
     },
     Z: {
-        type: Number,
+        type: String,
         required: true,
         trim: true
     },
     S: {
-        type: Number,
+        type: String,
         required: true,
         trim: true,
-        default: 1
+        enum: ['unverified', 'active', 'inactive'],
+        default: 'unverified'
     },
     BID: {
         type: Number,
