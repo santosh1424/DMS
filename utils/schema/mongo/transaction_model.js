@@ -9,7 +9,7 @@ const mongoose = require('mongoose');
 const transactionSchema = new mongoose.Schema({
     BID: { type: Number, required: true },
     N: { type: String, required: true, trim: true, },
-    R: { type: String, required: true, trim: true, },
+    R: { type: String, trim: true, },
     C: { type: String, required: true },
     P: { type: String, required: true },
     SD: { type: Date, required: true },
