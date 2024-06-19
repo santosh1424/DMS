@@ -215,7 +215,7 @@ const fnListUser = async (req, res) => {
 
 const fnSendOTP = async (req, res) => {
     try {
-        if (parseInt(req.currentUserData.S) == 2) return httpResponse.fnPreConditionFailed(res);
+        if (req.currentUserData.S == "Active") return httpResponse.fnPreConditionFailed(res);
         const email = req.currentUserData.E;
         const otp = helper.fnRandomNumber(1000, 9999); // Generate a 6-digit OTP
         const otpKey = await redisKeys.fnOTPKey(req.currentUserData.BID, email)
@@ -264,11 +264,11 @@ const fnVerifyOTP = async (req, res) => {
                 E: email,
                 N: req.currentUserData.N,
                 BID,
-                S: 2,
+                S: "Active",
                 _userId
             }, constants.SECRET_KEY);
             //User Status and TKN
-            const updateUserTKN = await mongoOps.fnFindOneAndUpdate(userSchema, { E: email }, { S: 2, TKN });
+            const updateUserTKN = await mongoOps.fnFindOneAndUpdate(userSchema, { E: email }, { S: "Active", TKN });
             await redisClient.hmset(redisKeys.fnUserKey(BID, updateUserTKN._id), await redisSchema.fnSetUserSchema(updateUserTKN));
             const data = await aes.fnEncryptAES({ TKN: TKN });
             logger.debug("||Verified||", email, _userId)
