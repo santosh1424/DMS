@@ -52,7 +52,9 @@ const { fnConfigureSocketIO } = require('./config/socketConfig');
         // };
 
         // Use the CORS middleware with custom options
-        app.use(cors());
+        app.use(cors({
+            origin: "*"
+        }));
         // Use maintenance middleware for all routes
         app.use(fnMaintenancesCheck);
 

@@ -331,7 +331,15 @@ const fnCreateLoan = async (req, res) => {
 const fnListLoan = async (req, res) => {
     try {
         const BID = parseInt(req.currentUserData.BID) || 0;
-        const data = await aes.fnEncryptAES(await mongoOps.fnFind(loanSchema, { BID }));
+        const type = req.query.T || null;
+        const value = req.query.V || null;
+        const query = { BID }
+        if (type && Array.isArray(value) && value.length > 0) {
+            if (type == 'P') query.P = { $in: value };//Product
+            if (type == 'Z') query.Z = { $in: value };//Zone
+            if (type == 'I') query.I = { $in: value };//Industry
+        }
+        const data = await aes.fnEncryptAES(await mongoOps.fnFind(loanSchema, query));
         return httpResponse.fnSuccess(res, data);
     } catch (error) {
         logger.warn('fnListLoan', error)
@@ -521,29 +529,19 @@ const fnListTeam = async (req, res) => {
 }
 
 //Adding MST 
-const fnAddMST = async (req, res) => {
+const fnUpdateMST = async (req, res) => {
     try {
         const BID = parseInt(req.currentUserData.BID) || 0;//UUID
-        if (!BID) return httpResponse.fnPreConditionFailed(res);
-        await mongoOps.fnInsertOne(mstSchema, { BID, ...req.body });
+        const _id = req.body._id || null;
+
+        if (!BID || _id && !ObjectId.isValid(_id)) return httpResponse.fnPreConditionFailed(res);
+
+        if (_id) await mongoOps.fnFindOneAndUpdate(mstSchema, { BID, _id: new ObjectId(_id) }, { V: req.body.V })
+        else await mongoOps.fnInsertOne(mstSchema, { BID, N: req.body.N, V: req.body.V });
+        logger.debug('Updating MST....', _id, req.body)
         return httpResponse.fnSuccess(res);
     } catch (error) {
-        logger.warn('fnAddMST', error)
-        if (error.code === 11000) return httpResponse.fnUnprocessableContent(res);//MongoDB DuplicateKey error
-        else return httpResponse.fnBadRequest(res);
-
-    }
-};
-
-//Adding MST 
-const fnEditMST = async (req, res) => {
-    try {
-        const BID = parseInt(req.currentUserData.BID) || 0;//UUID
-        if (!BID) return httpResponse.fnPreConditionFailed(res);
-        await mongoOps.fnFindOneAndUpdate(mstSchema, { BID, N: req.body.N }, { V: req.body.V });
-        return httpResponse.fnSuccess(res);
-    } catch (error) {
-        logger.warn('fnEditMST', error)
+        logger.warn('fnUpdateMST', error)
         if (error.code === 11000) return httpResponse.fnUnprocessableContent(res);//MongoDB DuplicateKey error
         else return httpResponse.fnBadRequest(res);
 
@@ -865,7 +863,6 @@ const fnAssignListDocsDetail = async (req, res) => {
         const sessionName = req.query.SN;
         let selectedDocsSchemaName;
         if (!email || !sessionName) return httpResponse.fnConflict(res);
-        logger.debug(email, sessionName)
         if (sessionName == 'TD') selectedDocsSchemaName = "transaction_models";
         else if (sessionName == 'CD') selectedDocsSchemaName = "compliance_models";
         else if (sessionName == 'C') selectedDocsSchemaName = "covenants_models";
@@ -947,7 +944,7 @@ const fnAssignListDocsDetail = async (req, res) => {
                 }
             }
         ];
-        logger.debug(helper.fnStringlyJSON(query));
+        logger.debug('QuErY', helper.fnStringlyJSON(query));
         let output = await mongoOps.fnAggregate(teamSchema, query);
         const data = await aes.fnEncryptAES(output);
         return httpResponse.fnSuccess(res, data);
@@ -995,9 +992,8 @@ module.exports = {
     fnDeleteDocs,
     fnAddDocsDetails,
     fnEditDocsDetails,
-    fnAddMST,
+    fnUpdateMST,
     fnListMST,
-    fnEditMST,
     fnAssignListDocsDetail
 }
 

@@ -8,7 +8,11 @@ const mongoose = require('mongoose');
 
 const mstSchema = new mongoose.Schema({
     N: { type: String, required: true },
-    V: { type: Object, required: true },
+    V: { type: Array, required: true },
+    BID: {
+        type: Number,
+        required: true,
+    },
     S: {
         type: String,
         required: true,
