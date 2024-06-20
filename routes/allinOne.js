@@ -40,8 +40,7 @@ router.post('/selectTeam', validate.fnDecryptBody, validate.fnAuthenticateToken,
 router.get('/suggestion', validate.fnAuthenticateToken, allinOneController.fnSuggestion);
 
 //mst 
-router.post('/addMST', [validate.fnDecryptBody, validate.mstVaildate, validate.fnAuthenticateToken, validate.vaildator], allinOneController.fnAddMST);
-router.post('/addMST', [validate.fnDecryptBody, validate.mstVaildate, validate.fnAuthenticateToken, validate.vaildator], allinOneController.fnEditMST);
+router.post('/updateMST', [validate.fnDecryptBody, validate.mstVaildate, validate.fnAuthenticateToken, validate.vaildator], allinOneController.fnUpdateMST);
 router.get('/listMST', validate.fnAuthenticateToken, allinOneController.fnListMST);
 
 //Roles
