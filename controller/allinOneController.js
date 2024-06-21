@@ -36,6 +36,7 @@ const fs = require('fs');
 const multer = require('multer');
 const { fnAllInStorage } = require('../config/file_config');
 const _uploadMiddleware = multer({ storage: fnAllInStorage }).array('file');
+const mstService = require('../service/mst_service');
 
 const fnTestApp = (req, res) => {
     try {
