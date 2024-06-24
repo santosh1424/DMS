@@ -32,31 +32,22 @@ const { fnConfigureSocketIO } = require('./config/socketConfig');
         app.use(express.urlencoded({ extended: true }));//Middleware to parse URL-encoded data
         app.use(express.json());//Middleware to parse JSON data
 
-        // Trust proxy to handle headers correctly
-        // app.set('trust proxy', 1);
+        // Define CORS options
+        const corsOptions = {
+            origin: function (origin, callback) {
+                if (constants.ALLOWED_ORIGINS.indexOf(origin) !== -1 || !origin) {
+                    // Allow requests with a matching origin or if origin is undefined (e.g., from server-side)
+                    callback(null, true);
+                } else {
+                    // Disallow requests with origins not in the allowedOrigins 
+                    callback(new Error('Not allowed by CORS'));
+                }
+            }
+        };
 
-        // const allowedOrigins = ["http://127.0.0.1"];
+        app.use(cors(corsOptions));   // Use the CORS middleware with custom options
 
-        // // Define CORS options
-        // const corsOptions = {
-        //     origin: function (origin, callback) {
-        //         console.log("Origin:", origin); // Log the origin value
-        //         if (allowedOrigins.indexOf(origin) !== -1 || !origin) {
-        //             // Allow requests with a matching origin or if origin is undefined (e.g., from server-side)
-        //             callback(null, true);
-        //         } else {
-        //             // Disallow requests with origins not in the allowedOrigins 
-        //             callback(new Error('Not allowed by CORS'));
-        //         }
-        //     }
-        // };
-
-        // Use the CORS middleware with custom options
-        app.use(cors({
-            origin: "*"
-        }));
-        // Use maintenance middleware for all routes
-        app.use(fnMaintenancesCheck);
+        app.use(fnMaintenancesCheck);        // Use maintenance middleware for all routes
 
         app.get('/health', (req, res) => res.sendStatus(200).end());
         app.use(require('./routes'));
@@ -73,9 +64,9 @@ const { fnConfigureSocketIO } = require('./config/socketConfig');
                     const io = socketIO(http, {
                         reconnection: true,// Enable reconnection
                         reconnectionDelay: 1000, // Delay between reconnection attempts (in milliseconds)
-                        // reconnectionAttempts: 3, // Number of reconnection attempts
+                        reconnectionAttempts: 3, // Number of reconnection attempts
                         cors: {
-                            origin: ["https://dms-site.vercel.app/"]
+                            origin: corsOptions
                         }
                     });
                     //socket fnMaintenancesCheck

@@ -16,6 +16,7 @@ module.exports = {
     CODE_VERSION: process.env.CODE_VERSION,
     NODE_ENV: process.env.NODE_ENV,
     LOCAL_IP: process.env.LOCAL_IP || "",
+    ALLOWED_ORIGINS: process.env.ALLOWED_ORIGINS.split(',').map(origin => origin.trim()) || "",
     UNDER_MAINTENANCE_MODE: process.env.UNDER_MAINTENANCE_MODE,
     MONGODB_URI: process.env.MONGODB_URI,
     REDIS_URI: process.env.REDIS_URI,

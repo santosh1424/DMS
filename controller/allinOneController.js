@@ -22,7 +22,8 @@ const {
     subsequentSchema,
     precedentSchema,
     mstSchema,
-    managerSchema
+    managerSchema,
+    paymentSchema
 } = require('../utils/schema/mongo/index');
 const aes = require('../utils/aes');
 const redisKeys = require('../utils/schema/redis/redisKeys');
@@ -36,7 +37,6 @@ const fs = require('fs');
 const multer = require('multer');
 const { fnAllInStorage } = require('../config/file_config');
 const _uploadMiddleware = multer({ storage: fnAllInStorage }).array('file');
-const mstService = require('../service/mst_service');
 
 const fnTestApp = (req, res) => {
     try {
@@ -512,7 +512,7 @@ const fnSelectTeam = async (req, res) => {
     }
 }
 
-//List Team  + Current team 
+//List Team  +  Current team 
 const fnListTeam = async (req, res) => {
     try {
         const BID = parseInt(req.currentUserData.BID) || 0;
@@ -597,6 +597,7 @@ const fnListRole = async (req, res) => {
         return httpResponse.fnBadRequest(res);
     }
 }
+
 //Adding Rating  
 const fnAddRating = async (req, res) => {
     try {
@@ -628,9 +629,7 @@ const fnListRating = async (req, res) => {
     }
 }
 
-//Tranaction Documents
-
-//Adding Documents Details  
+//Adding Edit Delete Transaction,Compliance,Covenants,Covenants Subsequent,Covenants Precedent Documents & Payment Schedule
 const fnAddDocsDetails = async (req, res) => {
     try {
         const BID = parseInt(req.currentUserData.BID) || 0;
@@ -646,7 +645,8 @@ const fnAddDocsDetails = async (req, res) => {
         else if (req.body.SN == 'CP') { selectedDocsSchema = precedentSchema; delete req.body.SN; }
 
         logger.debug('Add Docs Details...', selectedDocsSchema, req.body)
-        const data = await aes.fnEncryptAES(await mongoOps.fnInsertOne(selectedDocsSchema, { BID, _loanId: new ObjectId(_loanId), ...req.body }));
+        let data = await mongoOps.fnInsertOne(selectedDocsSchema, { BID, _loanId: new ObjectId(_loanId), ...req.body })
+        data = await aes.fnEncryptAES(data);
         return httpResponse.fnSuccess(res, data);
     } catch (error) {
         logger.warn('fnAddDocsDetails', error)
@@ -662,7 +662,6 @@ const fnEditDocsDetails = async (req, res) => {
         const _id = req.body._id || null;
 
         if (!ObjectId.isValid(_id) || !req.body.SN || !BID) return httpResponse.fnPreConditionFailed(res);
-        // Add Documents Details 
         let selectedDocsSchema;
         if (req.body.SN == 'TD') { selectedDocsSchema = transactionSchema; delete req.body.SN; }
         else if (req.body.SN == 'CD') { selectedDocsSchema = complianceSchema; delete req.body.SN; }
@@ -736,37 +735,6 @@ const fnUploadTD = async (req, res) => {
 
 };
 
-// const fnUpdateTD = async (req, res) => {
-//     _uploadMiddleware(req, res, async () => {
-//         try {
-//             if (req.body.data) req.body = await aes.fnDecryptAES(req.body.data);
-//             logger.warn('_uploadMiddleware ', req.body, req.files)
-//             const BID = parseInt(req.currentUserData.BID) || 0;
-//             if (!req.files || req.files.length === 0) {
-//                 if (req.body.data) req.body = await aes.fnDecryptAES(req.body.data);
-//                 else return httpResponse.fnPreConditionFailed(res);
-//             }
-//             const sessionName = req.body.LOC.split("/")[1] || null;
-//             const folderName = req.body.LOC.split("/")[2] || null;
-//             const _id = req.body._id || null;
-//             let selectedDocsSchema = transactionSchema;
-//             if (!ObjectId.isValid(_id) || !selectedDocsSchema || !BID || !folderName || !sessionName) return httpResponse.fnConflict(res);
-//             const query = { BID, _id: new ObjectId(_id) };
-//             delete req.body.N;//Prevent to Update Session Name
-//             const body = { ...req.body, $push: { Docs: { $each: req.files } } }
-//             if (sessionName == 'TD') selectedDocsSchema = transactionSchema
-
-//             await mongoOps.fnFindOneAndUpdate(selectedDocsSchema, query, body);
-//             return httpResponse.fnSuccess(res);
-//         } catch (error) {
-//             logger.warn('fnUpdateTD ', error);
-//             return httpResponse.fnBadRequest(res);
-//         }
-//     });
-//     return null;
-
-// };
-
 const fnViewDocs = async (req, res) => {
     try {
         const filepath = path.join(__dirname, '..', `public/docs/${req.currentUserData.BID}/${req.query.LOC}`);
@@ -833,7 +801,7 @@ const fnDeleteDocs = async (req, res) => {
             if (stat.isFile()) {
                 const sessionName = req.query.LOC.split("/")[1] || null;
                 let selectedDocsSchema;
-                if (sessionName == 'TD') selectedDocsSchema = transactionSchema
+                if (sessionName == 'TD') { selectedDocsSchema = transactionSchema; }
                 else if (sessionName == 'CD') { selectedDocsSchema = complianceSchema; }
                 else if (sessionName == 'C') { selectedDocsSchema = covenantsSchema; }
                 else if (sessionName == 'CS') { selectedDocsSchema = subsequentSchema; }
@@ -853,8 +821,42 @@ const fnDeleteDocs = async (req, res) => {
             return httpResponse.fnPreConditionFailed(res); // File not found
         }
     } catch (error) {
-        console.error('fnDeleteDocs error:', error);
+        logger.warn('fnDeleteDocs error:', error);
         return res.status(400).send('Bad Request');
+    }
+};
+
+const fnAddPaymentDetails = async (req, res) => {
+    try {
+        const BID = parseInt(req.currentUserData.BID) || 0;
+        const _loanId = req.body._loanId || null
+        if (!ObjectId.isValid(_loanId) || !BID) return httpResponse.fnPreConditionFailed(res);
+        // Add Documents Details 
+        req.body.BID = parseInt(req.currentUserData.BID) || 0;//UUID
+        let data = await mongoOps.fnInsertOne(paymentSchema, { BID, _loanId: new ObjectId(_loanId), ...req.body })
+        logger.debug('Added Payment  Details...', data)
+        data = await aes.fnEncryptAES(data);
+        return httpResponse.fnSuccess(res, data);
+    } catch (error) {
+        logger.warn('fnAddPaymentDetails', error)
+        if (error.code === 11000) return httpResponse.fnUnprocessableContent(res);//MongoDB DuplicateKey error
+        else return httpResponse.fnBadRequest(res);
+
+    }
+};
+
+const fnListPaymentDetails = async (req, res) => {
+    try {
+        const BID = parseInt(req.currentUserData.BID) || 0;
+        if (!BID) return httpResponse.fnPreConditionFailed(res);
+        req.body.BID = parseInt(req.currentUserData.BID) || 0;//UUID
+        let data = await mongoOps.fnFind(paymentSchema, { BID })
+        logger.debug('Listing Payment  Details...', data)
+        data = await aes.fnEncryptAES(data);
+        return httpResponse.fnSuccess(res, data);
+    } catch (error) {
+        logger.warn('fnListPaymentDetails', error)
+        return httpResponse.fnBadRequest(res); G
     }
 };
 
@@ -992,10 +994,12 @@ module.exports = {
     fnDownloadDocs,
     fnDeleteDocs,
     fnAddDocsDetails,
+    fnAddPaymentDetails,
     fnEditDocsDetails,
     fnUpdateMST,
     fnListMST,
-    fnAssignListDocsDetail
+    fnAssignListDocsDetail,
+    fnListPaymentDetails
 }
 
 const _sendEmail = async (options) => {

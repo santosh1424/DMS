@@ -65,6 +65,8 @@ router.post('/verifyOTP', validate.fnDecryptBody, validate.fnAuthenticateToken, 
 router.post('/addDocsDetails', validate.fnAuthenticateToken, validate.fnDecryptBody, [validate.addDocsDetails, validate.vaildator], allinOneController.fnAddDocsDetails);//ADD 
 router.post('/editDocsDetails', validate.fnAuthenticateToken, validate.fnDecryptBody, [validate.editDocsDetails, validate.vaildator], allinOneController.fnEditDocsDetails);//EDIT 
 router.post('/uploadDocs', validate.fnAuthenticateToken, allinOneController.fnUploadTD);//ADD  validate.fnFileData,  validate.fnDecryptBody, [validate.uploadDocsVaildate, validate.vaildator],
+router.post('/addPaymentDetails', validate.fnAuthenticateToken, validate.fnDecryptBody, [validate.addPaymentDetails, validate.vaildator], allinOneController.fnAddPaymentDetails);//ADD 
+router.get('/listPaymentDetails', validate.fnAuthenticateToken, allinOneController.fnListPaymentDetails);
 router.get('/listDocs', validate.fnAuthenticateToken, allinOneController.fnListDocs);
 router.get('/listDocsDetail', validate.fnAuthenticateToken, allinOneController.fnListDocsDetail);
 router.get('/viewDocs', validate.fnAuthenticateToken, allinOneController.fnViewDocs);
