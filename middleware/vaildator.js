@@ -135,6 +135,18 @@ const addDocsDetails = [
     check("SD", "StartDate is Required").not().isEmpty().trim(),
     check("ED", "EndDate is Required").not().isEmpty().trim(),
 ];
+
+const addPaymentDetails = [
+    check('_loanId', 'Loan ID is required').notEmpty().trim(),
+    check('F', 'Frequency is required').notEmpty().trim().isIn(['Daily', 'Weekly', 'Monthly', 'Yearly']),
+    check('P', 'Principal is required').notEmpty().trim().isNumeric(),
+    check('SD', 'Start Date is required').notEmpty().trim().isISO8601(),
+    check('ED', 'End Date is required').notEmpty().trim().isISO8601(),
+    check('T', 'Type is required').notEmpty().trim().isIn(['fixed', 'manual']),
+    check('I', 'Interest is required').notEmpty().trim().isNumeric(),
+    check('H', 'Holiday option is required').notEmpty().trim().isIn(['Subsequent', 'Precedent']),
+    check('GS', 'General settings are required').notEmpty()
+];
 const editDocsDetails = [
     check("_id", "_id is Required").not().isEmpty().trim(),
 ];
@@ -233,5 +245,6 @@ module.exports = {
     uploadDocsVaildate,
     addDocsDetails,
     mstVaildate,
-    editDocsDetails
+    editDocsDetails,
+    addPaymentDetails
 }
