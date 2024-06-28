@@ -895,26 +895,6 @@ const fnAssignListDocsDetail = async (req, res) => {
         else if (sessionName == 'PD') selectedDocsSchemaName = "payment_models";
         const query = [
             {
-                // $match: {
-                //     $expr: {
-                //         $or: [
-                //             { $eq: ["$L", email] },
-                //             { "$in": [email, "$TD.M"] },
-                //             { "$in": [email, "$TD.C"] },
-                //             { "$in": [email, "$CD.M"] },
-                //             { "$in": [email, "$CD.C"] },
-                //             { "$in": [email, "$C.M"] },
-                //             { "$in": [email, "$C.C"] },
-                //             { "$in": [email, "$CP.M"] },
-                //             { "$in": [email, "$CP.C"] },
-                //             { "$in": [email, "$CS.M"] },
-                //             { "$in": [email, "$CS.C"] },
-                //             { "$in": [email, "$PD.M"] },
-                //             { "$in": [email, "$PD.C"] }
-                //         ]
-                //     }
-                // }
-
                 $match: {
                     $expr: {
                         $or: [
