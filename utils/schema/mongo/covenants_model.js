@@ -20,7 +20,7 @@ const covenantsSchema = new mongoose.Schema({
         default: 'Pending'
     },
     T: { type: String, required: true },
-    F: { type: Number },
+    F: { type: String, enum: ['Daily', 'Weekly', 'Monthly', 'Quarterly', 'Half-Yearly', 'Yearly'] },
     P: { type: String, required: true },
     SD: { type: Date, required: true },
     ED: { type: Date, required: true },

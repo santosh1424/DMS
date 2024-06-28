@@ -136,15 +136,16 @@ const addDocsDetails = [
     check("ED", "EndDate is Required").not().isEmpty().trim(),
 ];
 
-const addPaymentDetails = [
-    check('_loanId', 'Loan ID is required').notEmpty().trim(),
-    check('F', 'Frequency is required').notEmpty().trim().isIn(['Daily', 'Weekly', 'Monthly', 'Yearly']),
-    check('P', 'Principal is required').notEmpty().trim().isNumeric(),
-    check('SD', 'Start Date is required').notEmpty().trim().isISO8601(),
-    check('ED', 'End Date is required').notEmpty().trim().isISO8601(),
-    check('T', 'Type is required').notEmpty().trim().isIn(['fixed', 'manual']),
-    check('I', 'Interest is required').notEmpty().trim().isNumeric(),
-    check('H', 'Holiday option is required').notEmpty().trim().isIn(['Subsequent', 'Precedent']),
+const updatePaymentDetails = [
+    check('_loanId', 'Loan ID is required').optional().trim(),
+    check('_id', '_id is required').optional().trim(),
+    check('F', 'Frequency is required').optional().trim().isIn(['Daily', 'Weekly', 'Monthly', 'Quarterly', 'Half-Yearly', 'Yearly']),
+    check('P', 'Principal is required').optional().trim().isNumeric(),
+    check('SD', 'Start Date is required').optional().trim(),//.isISO8601(),
+    check('ED', 'End Date is required').optional().trim(),//.isISO8601(),
+    check('T', 'Type is required').optional().trim().isIn(['Fixed', 'Manual']),
+    check('I', 'Interest is required').optional().trim().isNumeric(),
+    check('H', 'Holiday option is required').optional().trim().isIn(['Subsequent', 'Precedent', 'None']),
     check('GS', 'General settings are required').notEmpty()
 ];
 const editDocsDetails = [
@@ -246,5 +247,5 @@ module.exports = {
     addDocsDetails,
     mstVaildate,
     editDocsDetails,
-    addPaymentDetails
+    updatePaymentDetails
 }
