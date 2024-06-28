@@ -10,15 +10,14 @@ const roleSchema = new mongoose.Schema({
     N: {
         type: String,
         required: true,
-        unique: true,
         trim: true
     },
     S: {
         type: String,
         required: true,
         trim: true,
-        enum: ['active', 'inactive'],
-        default: 'active'
+        enum: ['Active', 'Inactive'],
+        default: 'Active'
     },
     BID: {
         type: Number,

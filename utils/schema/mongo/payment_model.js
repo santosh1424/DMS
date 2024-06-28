@@ -13,7 +13,7 @@ const paymentSchema = new mongoose.Schema({
     },
     F: {
         type: String,
-        enum: ['Daily', 'Weekly', 'Monthly', 'Yearly'], // Adjust frequency options as needed
+        enum: ['Daily', 'Weekly', 'Monthly', 'Quarterly', 'Half-Yearly', 'Yearly'], // Adjust frequency options as needed
         required: true
     },
     SD: {
@@ -26,22 +26,33 @@ const paymentSchema = new mongoose.Schema({
     },
     T: {
         type: String,
-        enum: ['fixed', 'manual'],
+        enum: ['Fixed', 'Manual'],
         required: true
+    },
+    S: {
+        type: String,
+        required: true,
+        trim: true,
+        enum: ['Pending', 'In progress', 'Complete'],
+        default: 'Pending'
     },
     I: {
         type: Number,
-        required: true
+        // required: true
     },
     H: {
         type: String,
         enum: ['Subsequent', 'Precedent', 'None'],
         required: true
     },
-    GS: {
-        type: Object,
-        required: true
-    }
+    GS: [{
+        _id: false,
+        D: Date,
+        R: String,
+        I: Number,
+        S: String,
+        FD: Object
+    }]
 });
 
 module.exports = mongoose.model('payment_model', paymentSchema);
