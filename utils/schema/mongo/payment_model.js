@@ -24,6 +24,10 @@ const paymentSchema = new mongoose.Schema({
         type: Date,
         required: true
     },
+    ND: {
+        type: Date,
+        required: true
+    },
     T: {
         type: String,
         enum: ['Fixed', 'Manual'],
@@ -39,6 +43,9 @@ const paymentSchema = new mongoose.Schema({
     I: {
         type: Number,
         // required: true
+    },
+    DEF: {
+        type: Number,
     },
     H: {
         type: String,
@@ -67,5 +74,10 @@ module.exports = mongoose.model('payment_model', paymentSchema);
  * I-Interest
  * H-Hoilday [Subsequent ,Precedent ]
  * GS-Generated Schedule 
+ *  D-Date
+ *  R-Remark
+ *  I-Interest
+ *  S-Status
+ *  FD-file data
  *  
 */

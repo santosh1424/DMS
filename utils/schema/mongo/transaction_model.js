@@ -12,6 +12,7 @@ const transactionSchema = new mongoose.Schema({
     R: { type: String, trim: true, },
     C: { type: String, required: true },
     P: { type: String, required: true },
+    DEF: { type: Number },
     SD: { type: Date, required: true },
     ED: { type: Date, required: true },
     EL: { type: String, trim: true },

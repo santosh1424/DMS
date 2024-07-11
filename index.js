@@ -20,6 +20,7 @@ global.redisOps = require('./utils/redisOps');
 global.redisKeys = require('./utils/schema/redis/redisKeys');
 global.redisClient = new Redis(constants.REDIS_URI);//Redis Connection
 global.redisSubscriber = new Redis(constants.REDIS_URI);//Redis Connection
+global.mycrons = require('./config/mycron_config');
 // global.aes = require('./utils/aes');
 const { fnDbConnection } = require('./config/database_config');
 const { fnMaintenancesCheck } = require('./middleware/vaildator');
@@ -60,6 +61,13 @@ const { fnConfigureSocketIO } = require('./config/socketConfig');
         const fnListenServer = async (http) => {
             await http.listen(constants.PORT, constants.LOCAL_IP, async () => {
                 try {
+                    // Redis connection listeners
+                    global.redisClient.on('ready', () => {
+                        logger.info('Redis Client Connected successfully');
+                    });
+                    global.redisClient.on('error', (err) => {
+                        logger.warn('Redis Client error:', err);
+                    });
                     await fnDbConnection(constants.MONGODB_URI);//MongoDB Connection
                     const io = socketIO(http, {
                         reconnection: true,// Enable reconnection
@@ -72,6 +80,7 @@ const { fnConfigureSocketIO } = require('./config/socketConfig');
                     //socket fnMaintenancesCheck
                     io.use((res, next) => (parseInt(constants.UNDER_MAINTENANCE_MODE)) ? next(httpResponse.fnServiceUnavailable(res)) : next());
                     await fnConfigureSocketIO(io);//Socket Connection
+                    await mycrons.fnCheckEndDate();//cron
                     logger.info('Server is Up and Running', http.address());
                 } catch (error) {
                     logger.warn(`fnListenServer`, error);

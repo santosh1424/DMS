@@ -55,6 +55,7 @@ router.post('/createContact', validate.fnDecryptBody, [validate.createContactVai
 router.get('/listContact', validate.fnAuthenticateToken, allinOneController.fnListContact);
 router.get('/getContact', validate.fnAuthenticateToken, allinOneController.fnGetContact);
 router.delete('/deleteContact', validate.fnAuthenticateToken, allinOneController.fnDeleteContact);
+router.delete('/deleteLoan', validate.fnAuthenticateToken, allinOneController.fnDeleteLoan);
 
 // Email
 router.get('/sendOTP', validate.fnAuthenticateToken, allinOneController.fnSendOTP);
@@ -73,6 +74,8 @@ router.get('/viewDocs', validate.fnAuthenticateToken, allinOneController.fnViewD
 router.delete('/deleteDocs', validate.fnAuthenticateToken, allinOneController.fnDeleteDocs);
 router.get('/downloadDocs', validate.fnAuthenticateToken, allinOneController.fnDownloadDocs);
 router.get('/assignlistDocsDetail', validate.fnAuthenticateToken, allinOneController.fnAssignListDocsDetail);
+router.get('/assignlistDefault', validate.fnAuthenticateToken, allinOneController.fnAssignListDefault);
+router.get('/assignlistCriticalCases', validate.fnAuthenticateToken, allinOneController.fnAssignListCriticalCase);
 router.get('/sendMail', allinOneController.fnTest);
 
 

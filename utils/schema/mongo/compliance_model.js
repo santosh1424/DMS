@@ -9,6 +9,7 @@ const mongoose = require('mongoose');
 const complianceSchema = new mongoose.Schema({
     BID: { type: Number, required: true },
     P: { type: String, required: true },
+    DEF: { type: Number },
     R: { type: String, trim: true, },
     SD: { type: Date, required: true },
     ED: { type: Date, required: true },

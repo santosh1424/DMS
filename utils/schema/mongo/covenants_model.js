@@ -22,6 +22,7 @@ const covenantsSchema = new mongoose.Schema({
     T: { type: String, required: true },
     F: { type: String, enum: ['Daily', 'Weekly', 'Monthly', 'Quarterly', 'Half-Yearly', 'Yearly'] },
     P: { type: String, required: true },
+    DEF: { type: Number },
     SD: { type: Date, required: true },
     ED: { type: Date, required: true },
     EL: { type: String },

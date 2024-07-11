@@ -173,6 +173,7 @@ const fnEditUser = async (req, res) => {
         if (req.body.S) updateUser.S = req.body.S;
         if (req.body.N) updateUser.N = req.body.N;
         if (req.body.R) updateUser.R = req.body.R;
+        if (req.body.UP) updateUser.UP = await helper.fnParseJSON(req.body.UP);
         req.body.BID = parseInt(req.currentUserData.BID);
         // Edit User
         await mongoOps.fnFindOneAndUpdate(userSchema, { BID, _id: new ObjectId(_id) }, updateUser)
@@ -429,10 +430,45 @@ const fnDeleteContact = async (req, res) => {
         const _id = req.query._id || null;
         const BID = parseInt(req.currentUserData.BID) || 0;
         if (!ObjectId.isValid(_id) || !BID) return httpResponse.fnPreConditionFailed(res);
-        const data = await aes.fnEncryptAES(await mongoOps.fnDeleteOne(contactsSchema, { BID, _id: new ObjectId(req.query._id) }));
-        return httpResponse.fnSuccess(res, data);
+        // const data = await aes.fnEncryptAES();
+        return httpResponse.fnSuccess(res);
     } catch (error) {
         logger.warn('fnDeleteContact', error);
+        return httpResponse.fnBadRequest(res);
+    }
+}
+//Delete Single Contact 
+const fnDeleteLoan = async (req, res) => {
+    try {
+        const _id = req.query._id || null;
+        const BID = parseInt(req.currentUserData.BID) || 0;
+        if (!ObjectId.isValid(_id) || !BID) return httpResponse.fnPreConditionFailed(res);
+
+        const loanDetails = await mongoOps.fnFindOne(loanSchema, { BID, _id: new ObjectId(_id) });
+        await mongoOps.fnDeleteOne(loanSchema, { BID, _id: new ObjectId(_id) });
+        await mongoOps.fnDeleteOne(paymentSchema, { BID, _loanId: new ObjectId(_id) });
+        await mongoOps.fnDeleteMany(ratingSchema, { BID, _loanId: new ObjectId(_id) });
+        await mongoOps.fnDeleteMany(contactsSchema, { BID, _loanId: new ObjectId(_id) });
+        await mongoOps.fnDeleteMany(transactionSchema, { BID, _loanId: new ObjectId(_id) });
+        await mongoOps.fnDeleteMany(complianceSchema, { BID, _loanId: new ObjectId(_id) });
+        await mongoOps.fnDeleteMany(covenantsSchema, { BID, _loanId: new ObjectId(_id) });
+        await mongoOps.fnDeleteMany(subsequentSchema, { BID, _loanId: new ObjectId(_id) });
+        await mongoOps.fnDeleteMany(precedentSchema, { BID, _loanId: new ObjectId(_id) });
+        const filepath = path.join(__dirname, '..', `public/docs/${req.currentUserData.BID}/${loanDetails.AID}`);
+        if (fs.existsSync(filepath)) {
+            const stat = fs.statSync(filepath);
+            if (stat.isDirectory()) {
+                fs.rmdirSync(filepath, { recursive: true });
+                logger.debug('Deleting Loan File Details....', _id, loanDetails);
+                return httpResponse.fnSuccess(res);
+            } else {
+                return httpResponse.fnConflict(res); // Specified path is a directory, not a file
+            }
+        }
+        logger.debug('Delete Loan Account ....', _id);
+        return httpResponse.fnSuccess(res);
+    } catch (error) {
+        logger.warn('fnDeleteLoan', error);
         return httpResponse.fnBadRequest(res);
     }
 }
@@ -822,9 +858,15 @@ const fnDeleteDocs = async (req, res) => {
                 const query = { BID, _id: new ObjectId(_id), 'FD.filename': filename };
                 const body = { $set: { S: "Pending" }, $unset: { FD: 1 } }
 
-                logger.debug('Deleting Docs ....', filepath, _id)
                 await mongoOps.fnFindOneAndUpdate(selectedDocsSchema, query, body);
-                fs.unlinkSync(filepath); // Delete only the file
+                // fs.unlinkSync(filepath); // Delete only the file
+                await fs.unlink(filepath, (err) => {
+                    if (err) {
+                        logger.warn(`Error deleting ${filepath}:`, err);
+                    } else {
+                        logger.debug(`File Successfully deleted...... ${filepath}`, _id);
+                    }
+                });
                 return httpResponse.fnSuccess(res);
             } else {
                 return httpResponse.fnConflict(res); // Specified path is a directory, not a file
@@ -884,6 +926,7 @@ const fnListPaymentDetails = async (req, res) => {
 const fnAssignListDocsDetail = async (req, res) => {
     try {
         const email = req.currentUserData.E;
+        const BID = req.currentUserData.BID;
         const sessionName = req.query.SN;
         let selectedDocsSchemaName;
         if (!email || !sessionName) return httpResponse.fnConflict(res);
@@ -897,23 +940,28 @@ const fnAssignListDocsDetail = async (req, res) => {
             {
                 $match: {
                     $expr: {
-                        $or: [
-                            { $eq: ["$L", email] },
-                            { $in: [email, { $ifNull: ["$TD.M", []] }] },
-                            { $in: [email, { $ifNull: ["$TD.C", []] }] },
-                            { $in: [email, { $ifNull: ["$CD.M", []] }] },
-                            { $in: [email, { $ifNull: ["$CD.C", []] }] },
-                            { $in: [email, { $ifNull: ["$C.M", []] }] },
-                            { $in: [email, { $ifNull: ["$C.C", []] }] },
-                            { $in: [email, { $ifNull: ["$CP.M", []] }] },
-                            { $in: [email, { $ifNull: ["$CP.C", []] }] },
-                            { $in: [email, { $ifNull: ["$CS.M", []] }] },
-                            { $in: [email, { $ifNull: ["$CS.C", []] }] },
-                            { $in: [email, { $ifNull: ["$PD.M", []] }] },
-                            { $in: [email, { $ifNull: ["$PD.C", []] }] }
+                        $and: [
+                            {
+                                $or: [
+                                    { $eq: ["$L", email] },
+                                    { $in: [email, { $ifNull: ["$TD.M", []] }] },
+                                    { $in: [email, { $ifNull: ["$TD.C", []] }] },
+                                    { $in: [email, { $ifNull: ["$CD.M", []] }] },
+                                    { $in: [email, { $ifNull: ["$CD.C", []] }] },
+                                    { $in: [email, { $ifNull: ["$C.M", []] }] },
+                                    { $in: [email, { $ifNull: ["$C.C", []] }] },
+                                    { $in: [email, { $ifNull: ["$CP.M", []] }] },
+                                    { $in: [email, { $ifNull: ["$CP.C", []] }] },
+                                    { $in: [email, { $ifNull: ["$CS.M", []] }] },
+                                    { $in: [email, { $ifNull: ["$CS.C", []] }] },
+                                    { $in: [email, { $ifNull: ["$PD.M", []] }] },
+                                    { $in: [email, { $ifNull: ["$PD.C", []] }] }
+                                ]
+                            },
+                            { $eq: ["$BID", BID] }
                         ]
                     }
-                }
+                },
             },
             {
                 $lookup: {
@@ -980,19 +1028,998 @@ const fnAssignListDocsDetail = async (req, res) => {
         return logger.warn('fnAssignListDocsDetail', error);
     }
 }
+
 const fnTest = async (req, res) => {
     try {
         const _id = '667934adb254c17c7742e543';
         const sessionName = 'TD';
         let selectedDocsSchema;
         let data = await mongoOps.fnFindOne(teamSchema, { _id: new ObjectId(_id) });
-        if (sessionName == 'TD')
-            _fnSendNotification("Transaction Document", "Add", 'santoshdubey.codium@gmail.com');
+        if (sessionName == 'TD') _fnSendNotification("Transaction Document", "Add", 'santoshdubey.codium@gmail.com');
         logger.debug(data, data.TD.M);//Maker data.TD.M
         return httpResponse.fnSuccess(res, data);
     } catch (error) {
         logger.warn('fnTest', error)
         return httpResponse.fnBadRequest(res);
+    }
+}
+
+const fnAssignListDefault = async (req, res) => {
+    try {
+        const email = req.currentUserData.E;
+        const BID = req.currentUserData.BID;
+        const query =
+            [
+                {
+                    $match: {
+                        $expr: {
+                            $and: [
+                                {
+                                    $or: [
+                                        {
+                                            $eq: ["$L", email]
+                                        },
+                                        {
+                                            $in: [
+                                                email,
+                                                {
+                                                    $ifNull: ["$TD.M", []]
+                                                }
+                                            ]
+                                        },
+                                        {
+                                            $in: [
+                                                email,
+                                                {
+                                                    $ifNull: ["$TD.C", []]
+                                                }
+                                            ]
+                                        },
+                                        {
+                                            $in: [
+                                                email,
+                                                {
+                                                    $ifNull: ["$CD.M", []]
+                                                }
+                                            ]
+                                        },
+                                        {
+                                            $in: [
+                                                email,
+                                                {
+                                                    $ifNull: ["$CD.C", []]
+                                                }
+                                            ]
+                                        },
+                                        {
+                                            $in: [
+                                                email,
+                                                {
+                                                    $ifNull: ["$C.M", []]
+                                                }
+                                            ]
+                                        },
+                                        {
+                                            $in: [
+                                                email,
+                                                {
+                                                    $ifNull: ["$C.C", []]
+                                                }
+                                            ]
+                                        },
+                                        {
+                                            $in: [
+                                                email,
+                                                {
+                                                    $ifNull: ["$CP.M", []]
+                                                }
+                                            ]
+                                        },
+                                        {
+                                            $in: [
+                                                email,
+                                                {
+                                                    $ifNull: ["$CP.C", []]
+                                                }
+                                            ]
+                                        },
+                                        {
+                                            $in: [
+                                                email,
+                                                {
+                                                    $ifNull: ["$CS.M", []]
+                                                }
+                                            ]
+                                        },
+                                        {
+                                            $in: [
+                                                email,
+                                                {
+                                                    $ifNull: ["$CS.C", []]
+                                                }
+                                            ]
+                                        },
+                                        {
+                                            $in: [
+                                                email,
+                                                {
+                                                    $ifNull: ["$PD.M", []]
+                                                }
+                                            ]
+                                        },
+                                        {
+                                            $in: [
+                                                email,
+                                                {
+                                                    $ifNull: ["$PD.C", []]
+                                                }
+                                            ]
+                                        }
+                                    ]
+                                },
+                                {
+                                    $eq: ["$BID", BID]
+                                }
+                            ]
+                        }
+                    }
+                },
+                {
+                    $lookup: {
+                        from: "loan_models",
+                        localField: "_id",
+                        foreignField: "_teamId",
+                        as: "loanDetails"
+                    }
+                },
+                {
+                    $unwind: {
+                        path: "$loanDetails",
+                        preserveNullAndEmptyArrays: true
+                    }
+                },
+                {
+                    $lookup: {
+                        from: "transaction_models",
+                        let: {
+                            loanId: "$loanDetails._id"
+                        },
+                        pipeline: [
+                            {
+                                $match: {
+                                    $expr: {
+                                        $and: [
+                                            {
+                                                $eq: ["$_loanId", "$$loanId"]
+                                            },
+                                            {
+                                                $eq: ["$DEF", 1]
+                                            }
+                                        ]
+                                    }
+                                }
+                            }
+                        ],
+                        as: "transactions"
+                    }
+                },
+                {
+                    $unwind: {
+                        path: "$transactions",
+                        preserveNullAndEmptyArrays: true
+                    }
+                },
+                {
+                    $lookup: {
+                        from: "compliance_models",
+                        let: {
+                            loanId: "$loanDetails._id"
+                        },
+                        pipeline: [
+                            {
+                                $match: {
+                                    $expr: {
+                                        $and: [
+                                            {
+                                                $eq: ["$_loanId", "$$loanId"]
+                                            },
+                                            {
+                                                $eq: ["$DEF", 1]
+                                            }
+                                        ]
+                                    }
+                                }
+                            }
+                        ],
+                        as: "compliance"
+                    }
+                },
+                {
+                    $unwind: {
+                        path: "$compliance",
+                        preserveNullAndEmptyArrays: true
+                    }
+                },
+                {
+                    $lookup: {
+                        from: "covenants_models",
+                        let: {
+                            loanId: "$loanDetails._id"
+                        },
+                        pipeline: [
+                            {
+                                $match: {
+                                    $expr: {
+                                        $and: [
+                                            {
+                                                $eq: ["$_loanId", "$$loanId"]
+                                            },
+                                            {
+                                                $eq: ["$DEF", 1]
+                                            }
+                                        ]
+                                    }
+                                }
+                            }
+                        ],
+                        as: "covenants"
+                    }
+                },
+                {
+                    $unwind: {
+                        path: "$covenants",
+                        preserveNullAndEmptyArrays: true
+                    }
+                },
+                {
+                    $lookup: {
+                        from: "precedent_models",
+                        let: {
+                            loanId: "$loanDetails._id"
+                        },
+                        pipeline: [
+                            {
+                                $match: {
+                                    $expr: {
+                                        $and: [
+                                            {
+                                                $eq: ["$_loanId", "$$loanId"]
+                                            },
+                                            {
+                                                $eq: ["$DEF", 1]
+                                            }
+                                        ]
+                                    }
+                                }
+                            }
+                        ],
+                        as: "precedents"
+                    }
+                },
+                {
+                    $unwind: {
+                        path: "$precedents",
+                        preserveNullAndEmptyArrays: true
+                    }
+                },
+                {
+                    $lookup: {
+                        from: "subsequent_models",
+                        let: {
+                            loanId: "$loanDetails._id"
+                        },
+                        pipeline: [
+                            {
+                                $match: {
+                                    $expr: {
+                                        $and: [
+                                            {
+                                                $eq: ["$_loanId", "$$loanId"]
+                                            },
+                                            {
+                                                $eq: ["$DEF", 1]
+                                            }
+                                        ]
+                                    }
+                                }
+                            }
+                        ],
+                        as: "subsequents"
+                    }
+                },
+                {
+                    $unwind: {
+                        path: "$subsequents",
+                        preserveNullAndEmptyArrays: true
+                    }
+                },
+                {
+                    $lookup: {
+                        from: "payment_models",
+                        let: {
+                            loanId: "$loanDetails._id"
+                        },
+                        pipeline: [
+                            {
+                                $match: {
+                                    $expr: {
+                                        $and: [
+                                            {
+                                                $eq: ["$_loanId", "$$loanId"]
+                                            },
+                                            {
+                                                $eq: ["$DEF", 1]
+                                            }
+                                        ]
+                                    }
+                                }
+                            }
+                        ],
+                        as: "payment"
+                    }
+                },
+                {
+                    $unwind: {
+                        path: "$payment",
+                        preserveNullAndEmptyArrays: true
+                    }
+                },
+                {
+                    $group: {
+                        _id: "$_id",
+                        N: {
+                            $first: "$N"
+                        },
+                        L: {
+                            $first: "$L"
+                        },
+                        BID: {
+                            $first: "$BID"
+                        },
+                        loanDetails: {
+                            $push: {
+                                $cond: {
+                                    if: {
+                                        $or: [
+                                            {
+                                                $eq: [
+                                                    "$transactions._loanId",
+                                                    "$loanDetails._id"
+                                                ]
+                                            },
+                                            {
+                                                $eq: [
+                                                    "$compliance._loanId",
+                                                    "$loanDetails._id"
+                                                ]
+                                            },
+                                            {
+                                                $eq: [
+                                                    "$covenants._loanId",
+                                                    "$loanDetails._id"
+                                                ]
+                                            },
+                                            {
+                                                $eq: [
+                                                    "$precedents._loanId",
+                                                    "$loanDetails._id"
+                                                ]
+                                            },
+                                            {
+                                                $eq: [
+                                                    "$subsequents._loanId",
+                                                    "$loanDetails._id"
+                                                ]
+                                            },
+                                            {
+                                                $eq: [
+                                                    "$payment._loanId",
+                                                    "$loanDetails._id"
+                                                ]
+                                            }
+                                        ]
+                                    },
+                                    then: "$loanDetails",
+                                    else: "$$REMOVE"
+                                }
+                            }
+                        },
+                        transactions: {
+                            $push: "$transactions"
+                        },
+                        compliance: {
+                            $push: "$compliance"
+                        },
+                        covenants: {
+                            $push: "$covenants"
+                        },
+                        precedents: {
+                            $push: "$precedents"
+                        },
+                        subsequents: {
+                            $push: "$subsequents"
+                        },
+                        payment: {
+                            $push: "$payment"
+                        }
+                    }
+                },
+                {
+                    $project: {
+                        _id: 1,
+                        N: 1,
+                        BID: 1,
+                        loanDetails: {
+                            $cond: {
+                                if: {
+                                    $gt: [
+                                        {
+                                            $size: "$loanDetails"
+                                        },
+                                        0
+                                    ]
+                                },
+                                then: "$loanDetails",
+                                else: "$$REMOVE"
+                            }
+                        },
+                        transactions: {
+                            $cond: {
+                                if: {
+                                    $gt: [
+                                        {
+                                            $size: "$transactions"
+                                        },
+                                        0
+                                    ]
+                                },
+                                then: "$transactions",
+                                else: "$$REMOVE"
+                            }
+                        },
+                        compliance: {
+                            $cond: {
+                                if: {
+                                    $gt: [
+                                        {
+                                            $size: "$compliance"
+                                        },
+                                        0
+                                    ]
+                                },
+                                then: "$compliance",
+                                else: "$$REMOVE"
+                            }
+                        },
+                        covenants: {
+                            $cond: {
+                                if: {
+                                    $gt: [
+                                        {
+                                            $size: "$covenants"
+                                        },
+                                        0
+                                    ]
+                                },
+                                then: "$covenants",
+                                else: "$$REMOVE"
+                            }
+                        },
+                        precedents: {
+                            $cond: {
+                                if: {
+                                    $gt: [
+                                        {
+                                            $size: "$precedents"
+                                        },
+                                        0
+                                    ]
+                                },
+                                then: "$precedents",
+                                else: "$$REMOVE"
+                            }
+                        },
+                        subsequents: {
+                            $cond: {
+                                if: {
+                                    $gt: [
+                                        {
+                                            $size: "$subsequents"
+                                        },
+                                        0
+                                    ]
+                                },
+                                then: "$subsequents",
+                                else: "$$REMOVE"
+                            }
+                        },
+                        payment: {
+                            $cond: {
+                                if: {
+                                    $gt: [
+                                        {
+                                            $size: "$payment"
+                                        },
+                                        0
+                                    ]
+                                },
+                                then: "$payment",
+                                else: "$$REMOVE"
+                            }
+                        }
+                    }
+                }
+            ];
+        logger.debug('DefaulteR QuErY', helper.fnStringlyJSON(query));
+        let output = await mongoOps.fnAggregate(teamSchema, query);
+
+        const data = await aes.fnEncryptAES(output);
+        return httpResponse.fnSuccess(res, data);
+        // return output;
+    } catch (error) {
+        return logger.warn('fnAssignListDefault', error);
+    }
+}
+
+const fnAssignListCriticalCase = async (req, res) => {
+    try {
+        const email = req.currentUserData.E;
+        const BID = req.currentUserData.BID;
+        const query =
+            [
+                {
+                    $match: {
+                        $expr: {
+                            $and: [
+                                {
+                                    $or: [
+                                        {
+                                            $eq: ["$L", email]
+                                        },
+                                        {
+                                            $in: [
+                                                email,
+                                                {
+                                                    $ifNull: ["$TD.M", []]
+                                                }
+                                            ]
+                                        },
+                                        {
+                                            $in: [
+                                                email,
+                                                {
+                                                    $ifNull: ["$TD.C", []]
+                                                }
+                                            ]
+                                        },
+                                        {
+                                            $in: [
+                                                email,
+                                                {
+                                                    $ifNull: ["$CD.M", []]
+                                                }
+                                            ]
+                                        },
+                                        {
+                                            $in: [
+                                                email,
+                                                {
+                                                    $ifNull: ["$CD.C", []]
+                                                }
+                                            ]
+                                        },
+                                        {
+                                            $in: [
+                                                email,
+                                                {
+                                                    $ifNull: ["$C.M", []]
+                                                }
+                                            ]
+                                        },
+                                        {
+                                            $in: [
+                                                email,
+                                                {
+                                                    $ifNull: ["$C.C", []]
+                                                }
+                                            ]
+                                        },
+                                        {
+                                            $in: [
+                                                email,
+                                                {
+                                                    $ifNull: ["$CP.M", []]
+                                                }
+                                            ]
+                                        },
+                                        {
+                                            $in: [
+                                                email,
+                                                {
+                                                    $ifNull: ["$CP.C", []]
+                                                }
+                                            ]
+                                        },
+                                        {
+                                            $in: [
+                                                email,
+                                                {
+                                                    $ifNull: ["$CS.M", []]
+                                                }
+                                            ]
+                                        },
+                                        {
+                                            $in: [
+                                                email,
+                                                {
+                                                    $ifNull: ["$CS.C", []]
+                                                }
+                                            ]
+                                        },
+                                        {
+                                            $in: [
+                                                email,
+                                                {
+                                                    $ifNull: ["$PD.M", []]
+                                                }
+                                            ]
+                                        },
+                                        {
+                                            $in: [
+                                                email,
+                                                {
+                                                    $ifNull: ["$PD.C", []]
+                                                }
+                                            ]
+                                        }
+                                    ]
+                                },
+                                {
+                                    $eq: ["$BID", BID]
+                                }
+                            ]
+                        }
+                    }
+                },
+                {
+                    $lookup: {
+                        from: "loan_models",
+                        localField: "_id",
+                        foreignField: "_teamId",
+                        as: "loanDetails"
+                    }
+                },
+                {
+                    $unwind: {
+                        path: "$loanDetails",
+                        preserveNullAndEmptyArrays: true
+                    }
+                },
+                {
+                    $lookup: {
+                        from: "transaction_models",
+                        let: {
+                            loanId: "$loanDetails._id"
+                        },
+                        pipeline: [
+                            {
+                                $match: {
+                                    $expr: {
+                                        $and: [
+                                            {
+                                                $eq: ["$_loanId", "$$loanId"]
+                                            },
+                                            {
+                                                $eq: ["$P", "High"]
+                                            }
+                                        ]
+                                    }
+                                }
+                            }
+                        ],
+                        as: "transactions"
+                    }
+                },
+                {
+                    $unwind: {
+                        path: "$transactions",
+                        preserveNullAndEmptyArrays: true
+                    }
+                },
+                {
+                    $lookup: {
+                        from: "compliance_models",
+                        let: {
+                            loanId: "$loanDetails._id"
+                        },
+                        pipeline: [
+                            {
+                                $match: {
+                                    $expr: {
+                                        $and: [
+                                            {
+                                                $eq: ["$_loanId", "$$loanId"]
+                                            },
+                                            {
+                                                $eq: ["$P", "High"]
+                                            }
+                                        ]
+                                    }
+                                }
+                            }
+                        ],
+                        as: "compliance"
+                    }
+                },
+                {
+                    $unwind: {
+                        path: "$compliance",
+                        preserveNullAndEmptyArrays: true
+                    }
+                },
+                {
+                    $lookup: {
+                        from: "covenants_models",
+                        let: {
+                            loanId: "$loanDetails._id"
+                        },
+                        pipeline: [
+                            {
+                                $match: {
+                                    $expr: {
+                                        $and: [
+                                            {
+                                                $eq: ["$_loanId", "$$loanId"]
+                                            },
+                                            {
+                                                $eq: ["$P", "High"]
+                                            }
+                                        ]
+                                    }
+                                }
+                            }
+                        ],
+                        as: "covenants"
+                    }
+                },
+                {
+                    $unwind: {
+                        path: "$covenants",
+                        preserveNullAndEmptyArrays: true
+                    }
+                },
+                {
+                    $lookup: {
+                        from: "precedent_models",
+                        let: {
+                            loanId: "$loanDetails._id"
+                        },
+                        pipeline: [
+                            {
+                                $match: {
+                                    $expr: {
+                                        $and: [
+                                            {
+                                                $eq: ["$_loanId", "$$loanId"]
+                                            },
+                                            {
+                                                $eq: ["$P", "High"]
+                                            }
+                                        ]
+                                    }
+                                }
+                            }
+                        ],
+                        as: "precedents"
+                    }
+                },
+                {
+                    $unwind: {
+                        path: "$precedents",
+                        preserveNullAndEmptyArrays: true
+                    }
+                },
+                {
+                    $lookup: {
+                        from: "subsequent_models",
+                        let: {
+                            loanId: "$loanDetails._id"
+                        },
+                        pipeline: [
+                            {
+                                $match: {
+                                    $expr: {
+                                        $and: [
+                                            {
+                                                $eq: ["$_loanId", "$$loanId"]
+                                            },
+                                            {
+                                                $eq: ["$P", "High"]
+                                            }
+                                        ]
+                                    }
+                                }
+                            }
+                        ],
+                        as: "subsequents"
+                    }
+                },
+                {
+                    $unwind: {
+                        path: "$subsequents",
+                        preserveNullAndEmptyArrays: true
+                    }
+                },
+                {
+                    $group: {
+                        _id: "$_id",
+                        N: {
+                            $first: "$N"
+                        },
+                        L: {
+                            $first: "$L"
+                        },
+                        BID: {
+                            $first: "$BID"
+                        },
+                        loanDetails: {
+                            $push: {
+                                $cond: {
+                                    if: {
+                                        $or: [
+                                            {
+                                                $eq: [
+                                                    "$transactions._loanId",
+                                                    "$loanDetails._id"
+                                                ]
+                                            },
+                                            {
+                                                $eq: [
+                                                    "$compliance._loanId",
+                                                    "$loanDetails._id"
+                                                ]
+                                            },
+                                            {
+                                                $eq: [
+                                                    "$covenants._loanId",
+                                                    "$loanDetails._id"
+                                                ]
+                                            },
+                                            {
+                                                $eq: [
+                                                    "$precedents._loanId",
+                                                    "$loanDetails._id"
+                                                ]
+                                            },
+                                            {
+                                                $eq: [
+                                                    "$subsequents._loanId",
+                                                    "$loanDetails._id"
+                                                ]
+                                            }
+                                        ]
+                                    },
+                                    then: "$loanDetails",
+                                    else: "$$REMOVE"
+                                }
+                            }
+                        },
+                        transactions: {
+                            $push: "$transactions"
+                        },
+                        compliance: {
+                            $push: "$compliance"
+                        },
+                        covenants: {
+                            $push: "$covenants"
+                        },
+                        precedents: {
+                            $push: "$precedents"
+                        },
+                        subsequents: {
+                            $push: "$subsequents"
+                        }
+                    }
+                },
+                {
+                    $project: {
+                        _id: 1,
+                        N: 1,
+                        BID: 1,
+                        loanDetails: {
+                            $cond: {
+                                if: {
+                                    $gt: [
+                                        {
+                                            $size: "$loanDetails"
+                                        },
+                                        0
+                                    ]
+                                },
+                                then: "$loanDetails",
+                                else: "$$REMOVE"
+                            }
+                        },
+                        transactions: {
+                            $cond: {
+                                if: {
+                                    $gt: [
+                                        {
+                                            $size: "$transactions"
+                                        },
+                                        0
+                                    ]
+                                },
+                                then: "$transactions",
+                                else: "$$REMOVE"
+                            }
+                        },
+                        compliance: {
+                            $cond: {
+                                if: {
+                                    $gt: [
+                                        {
+                                            $size: "$compliance"
+                                        },
+                                        0
+                                    ]
+                                },
+                                then: "$compliance",
+                                else: "$$REMOVE"
+                            }
+                        },
+                        covenants: {
+                            $cond: {
+                                if: {
+                                    $gt: [
+                                        {
+                                            $size: "$covenants"
+                                        },
+                                        0
+                                    ]
+                                },
+                                then: "$covenants",
+                                else: "$$REMOVE"
+                            }
+                        },
+                        precedents: {
+                            $cond: {
+                                if: {
+                                    $gt: [
+                                        {
+                                            $size: "$precedents"
+                                        },
+                                        0
+                                    ]
+                                },
+                                then: "$precedents",
+                                else: "$$REMOVE"
+                            }
+                        },
+                        subsequents: {
+                            $cond: {
+                                if: {
+                                    $gt: [
+                                        {
+                                            $size: "$subsequents"
+                                        },
+                                        0
+                                    ]
+                                },
+                                then: "$subsequents",
+                                else: "$$REMOVE"
+                            }
+                        }
+                    }
+                }
+            ];
+        logger.debug('Critial CaSe QuErY', helper.fnStringlyJSON(query));
+        let output = await mongoOps.fnAggregate(teamSchema, query);
+
+        const data = await aes.fnEncryptAES(output);
+        return httpResponse.fnSuccess(res, data);
+    } catch (error) {
+        return logger.warn('fnAssignListCriticalCase', error);
     }
 }
 
@@ -1008,6 +2035,7 @@ module.exports = {
     fnVerifyOTP,
     fnGetUser,
     fnGetContact,
+    fnDeleteLoan,
     fnDeleteContact,
     fnListUser,
     fnCreateLoan,
@@ -1028,6 +2056,8 @@ module.exports = {
     fnUploadDocs,
     fnListDocs,
     fnListDocsDetail,
+    fnAssignListDefault,
+    fnAssignListCriticalCase,
     // fnUpdateTD,
     fnViewDocs,
     fnDownloadDocs,
