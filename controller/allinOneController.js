@@ -886,18 +886,19 @@ const fnUpdatePaymentDetails = async (req, res) => {
         const _loanId = req.body._loanId || null
         const _id = req.body._id || null
         if (!BID) return httpResponse.fnPreConditionFailed(res);
-        if (_loanId && ObjectId.isValid(_loanId)) {
+        if (_id && ObjectId.isValid(_id)) {
+            // Add Documents Details 
+            req.body.BID = parseInt(req.currentUserData.BID) || 0;//UUID
+            let data = await mongoOps.fnFindOneAndUpdate(paymentSchema, { BID, _id: new ObjectId(_id) }, { GS: req.body.GS })
+            logger.debug('Update Payment  Details GS', data)
+            return httpResponse.fnSuccess(res);
+        }
+        else if (!_id && _loanId && ObjectId.isValid(_loanId)) {
 
             // Add Documents Details 
             req.body.BID = parseInt(req.currentUserData.BID) || 0;//UUID
             let data = await mongoOps.fnInsertOne(paymentSchema, { BID, _loanId: new ObjectId(_loanId), ...req.body })
             logger.debug('Added Payment  Details...', data)
-            return httpResponse.fnSuccess(res);
-        } else if (_id && ObjectId.isValid(_id)) {
-            // Add Documents Details 
-            req.body.BID = parseInt(req.currentUserData.BID) || 0;//UUID
-            let data = await mongoOps.fnFindOneAndUpdate(paymentSchema, { BID, _id: new ObjectId(_id) }, { GS: req.body.GS })
-            logger.debug('Update Payment  Details GS', data)
             return httpResponse.fnSuccess(res);
         }
     } catch (error) {
