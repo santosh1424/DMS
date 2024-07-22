@@ -28,7 +28,7 @@ router.get('/listUser', validate.fnAuthenticateToken, allinOneController.fnListU
 
 //Loan Routes 
 router.post('/createAID', validate.fnDecryptBody, validate.fnAuthenticateToken, allinOneController.fnCreateAID);
-router.post('/createLoan', validate.fnDecryptBody, [validate.createLoanVaildate, validate.fnAuthenticateToken, validate.vaildator], allinOneController.fnCreateLoan);
+router.post('/updateLoan', validate.fnDecryptBody, [validate.createLoanVaildate, validate.fnAuthenticateToken, validate.vaildator], allinOneController.fnUpdateLoan);
 router.get('/listLoan', validate.fnAuthenticateToken, allinOneController.fnListLoan);
 router.get('/getLoan', validate.fnAuthenticateToken, allinOneController.fnGetLoan);
 
@@ -51,7 +51,7 @@ router.get('/listRole', validate.fnAuthenticateToken, allinOneController.fnListR
 router.post('/addRating', [validate.fnDecryptBody, validate.ratingVaildate, validate.fnAuthenticateToken, validate.vaildator], allinOneController.fnAddRating);
 router.get('/listRating', validate.fnAuthenticateToken, allinOneController.fnListRating);
 //Contact Routes 
-router.post('/createContact', validate.fnDecryptBody, [validate.createContactVaildate, validate.fnAuthenticateToken, validate.vaildator], allinOneController.fnCreateContact);
+router.post('/updateContact', validate.fnDecryptBody, [validate.createContactVaildate, validate.fnAuthenticateToken, validate.vaildator], allinOneController.fnUpdateContact);
 router.get('/listContact', validate.fnAuthenticateToken, allinOneController.fnListContact);
 router.get('/getContact', validate.fnAuthenticateToken, allinOneController.fnGetContact);
 router.delete('/deleteContact', validate.fnAuthenticateToken, allinOneController.fnDeleteContact);

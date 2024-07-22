@@ -24,7 +24,7 @@ const paymentSchema = new mongoose.Schema({
         type: Date,
         required: true
     },
-    ND: {
+    CD: {
         type: Date,
         required: true
     },
@@ -37,7 +37,7 @@ const paymentSchema = new mongoose.Schema({
         type: String,
         required: true,
         trim: true,
-        enum: ['Pending', 'In progress', 'Complete'],
+        enum: ['Pending', 'In progress', 'Verified'],
         default: 'Pending'
     },
     I: {
@@ -70,6 +70,7 @@ module.exports = mongoose.model('payment_model', paymentSchema);
  * F-Frequency
  * SD-Start Date
  * ED-End Date
+ * CD-Current EMI Date
  * T-type [fixed,manual]
  * I-Interest
  * H-Hoilday [Subsequent ,Precedent ]

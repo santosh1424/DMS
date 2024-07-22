@@ -16,7 +16,7 @@ const covenantsSchema = new mongoose.Schema({
         type: String,
         required: true,
         trim: true,
-        enum: ['Pending', 'In progress', 'Complete'],
+        enum: ['Pending', 'In progress', 'Verified'],
         default: 'Pending'
     },
     T: { type: String, required: true },

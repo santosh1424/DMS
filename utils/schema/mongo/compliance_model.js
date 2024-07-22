@@ -22,7 +22,7 @@ const complianceSchema = new mongoose.Schema({
         type: String,
         required: true,
         trim: true,
-        enum: ['Pending', 'In progress', 'Complete'],
+        enum: ['Pending', 'In progress', 'Verified'],
         default: 'Pending'
     },
     _loanId: {
