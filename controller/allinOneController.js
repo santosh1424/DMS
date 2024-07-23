@@ -120,7 +120,22 @@ const fnLogin = async (req, res) => {
         //Update TKN in MongoDB
         const updateUserTKN = await mongoOps.fnFindOneAndUpdate(userSchema, { BID: user.BID, E: user.E, }, { TKN }, { new: true, lean: true, projection: { P: 0, __v: 0 } });
         //Add user in redis
-        await redisClient.hmset(redisKeys.fnUserKey(user.BID, user._id), await redisSchema.fnSetUserSchema(updateUserTKN));
+        //await redisClient.hmset(redisKeys.fnUserKey(user.BID, user._id), await redisSchema.fnSetUserSchema(updateUserTKN));
+        const userkey = redisKeys.fnUserKey(user.BID, user._id);
+        const userData = await redisSchema.fnSetUserSchema(updateUserTKN);
+
+        try {
+            await redisClient.multi()
+                .hmset(userkey, userData)
+                .expire(userkey, 3 * 24 * 60 * 60) // 3 days in seconds
+                .exec();
+
+            logger.debug('User set in Redis with expiration', userkey);
+        } catch (err) {
+            logger.warn('Error setting user in Redis:', err);
+            return httpResponse.fnConflict(res);
+        }
+        //UP: updateUserTKN.UP
         const data = await aes.fnEncryptAES({ TKN })
         //Encryption
         return httpResponse.fnSuccess(res, data);
@@ -1503,17 +1518,23 @@ const _sendEmail = async (options) => {
     }
 }
 
-const _fnVaildatingPermission = async (_id, moduleName = null, sPremission = 'accesss', flag = 0) => {
+const _fnVaildatingPermission = async (_id, moduleName = null, sPremission = 'access', flag = 0) => {
     try {
-        const userPremission = await mongoOps.fnFindById(userSchema, _id, { UP: 1, _id: 0 }) || null;
-        if (!flag && Object.keys(userPremission).length != 0 && userPremission['UP'] && userPremission['UP'][`${moduleName}`] && userPremission['UP'][`${moduleName}`].includes(`${sPremission}`)) return true;
-        else if (flag && Object.keys(userPremission).length != 0 && userPremission['UP'] && userPremission['UP'][`${moduleName}`]['docs'] && userPremission['UP'][`${moduleName}`]['docs'].includes(`${sPremission}`)) return true;
-        return false;
+        const userPermissionDoc = await mongoOps.fnFindById(userSchema, _id, { UP: 1, _id: 0 });
+        const userPermission = userPermissionDoc ? userPermissionDoc.UP : null;
+
+        if (!userPermission) return false;
+
+        if (!flag) return userPermission[moduleName] && userPermission[moduleName].includes(sPremission);
+        else return userPermission[moduleName] && userPermission[moduleName].docs && userPermission[moduleName].docs.includes(sPremission);
+
+        return null;
     } catch (error) {
         logger.warn('_fnVaildatingPermission', error);
         return false;
     }
-}
+};
+
 const _fnSelectSchema = async (sessionName, operation) => {
     try {
         let selectedDocsSchema, userPremission;
@@ -1562,7 +1583,7 @@ const _fnSendNotification = async (schema, status, email) => {
     return await _sendEmail({
         to: email,
         subject: 'Document Management for ERP',
-        message: `<h1>Document Management </h1>
+        message: `< h1 > Document Management </h1 >
         <p>Dear User,</p>
         <p>Your ${schema} : <strong>${status}</strong></p>
         <p>Take action on our platform.</p>
