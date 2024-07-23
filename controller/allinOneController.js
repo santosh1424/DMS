@@ -230,9 +230,23 @@ const fnListUser = async (req, res) => {
         const BID = parseInt(req.currentUserData.BID) || 0;
         const userPremission = await _fnVaildatingPermission(req.currentUserData._userId, 'user', 'access');
         if (!userPremission) return httpResponse.fnForbidden(res)
-        //Encryption
-        const data = await aes.fnEncryptAES(await mongoOps.fnFind(userSchema, { BID }, { __v: 0, P: 0, UP: 0, _adminId: 0, updatedAt: 0 }))
-        return httpResponse.fnSuccess(res, data);
+
+        const page = parseInt(req.query.page) || 1;
+        const limit = parseInt(req.query.limit) || 10;
+        const pipeline = [
+            { $match: { BID } },
+            {
+                $facet: {
+                    metadata: [{ $count: "total" }],
+                    data: [
+                        { $skip: (page - 1) * limit },
+                        { $limit: limit },
+                        { $project: { __v: 0, P: 0, UP: 0, _adminId: 0, updatedAt: 0 } }
+                    ]
+                }
+            }
+        ];
+        return httpResponse.fnSuccess(res, await aes.fnEncryptAES(await mongoOps.fnAggregate(userSchema, pipeline)));
     } catch (error) {
         logger.warn('fnListUser', error);
         return httpResponse.fnBadRequest(res);
@@ -369,8 +383,24 @@ const fnListLoan = async (req, res) => {
             if (type == 'Z') query.Z = { $in: value };//Zone
             if (type == 'I') query.I = { $in: value };//Industry
         }
-        const data = await aes.fnEncryptAES(await mongoOps.fnFind(loanSchema, query));
-        return httpResponse.fnSuccess(res, data);
+
+        const page = parseInt(req.query.page) || 1;
+        const limit = parseInt(req.query.limit) || 10;
+        const pipeline = [
+            { $match: query },
+            {
+                $facet: {
+                    metadata: [{ $count: "total" }],
+                    data: [
+                        { $skip: (page - 1) * limit },
+                        { $limit: limit },
+                        { $project: { AID: 1, CN: 1, Z: 1, SA: 1, S: 1 } }
+                    ]
+                }
+            }
+        ];
+
+        return httpResponse.fnSuccess(res, await aes.fnEncryptAES(await mongoOps.fnAggregate(loanSchema, pipeline)));
     } catch (error) {
         logger.warn('fnListLoan', error)
         return httpResponse.fnBadRequest(res);
@@ -433,10 +463,24 @@ const fnListContact = async (req, res) => {
         const BID = parseInt(req.currentUserData.BID) || 0;
         const _loanId = req.query._loanId || null;
         if (!ObjectId.isValid(_loanId) || !BID) return httpResponse.fnPreConditionFailed(res);
-        const contacts = await mongoOps.fnFind(contactsSchema, { BID, _loanId: new ObjectId(_loanId) }, { __v: 0, })
-        //Encryption
-        const data = await aes.fnEncryptAES(contacts)
-        return httpResponse.fnSuccess(res, data);
+
+        const page = parseInt(req.query.page) || 1;
+        const limit = parseInt(req.query.limit) || 10;
+        const pipeline = [
+            { $match: { BID, _loanId: new ObjectId(_loanId) } },
+            {
+                $facet: {
+                    metadata: [{ $count: "total" }],
+                    data: [
+                        { $skip: (page - 1) * limit },
+                        { $limit: limit },
+                        { $project: { N: 1, E: 1, D: 1 } }
+                    ]
+                }
+            }
+        ];
+
+        return httpResponse.fnSuccess(res, await aes.fnEncryptAES(await mongoOps.fnAggregate(contactsSchema, pipeline)));
     } catch (error) {
         logger.warn('fnListContact', error);
         return httpResponse.fnBadRequest(res);
@@ -608,11 +652,26 @@ const fnListTeam = async (req, res) => {
         const BID = parseInt(req.currentUserData.BID) || 0;
         const _loanId = req.query._loanId || null;
         if (!BID) return httpResponse.fnPreConditionFailed(res);
-        let data = {};
-        data.list = await mongoOps.fnFind(teamSchema, { BID })
+
+        const query = { BID }
+        const page = parseInt(req.query.page) || 1;
+        const limit = parseInt(req.query.limit) || 10;
+        const pipeline = [
+            { $match: query },
+            {
+                $facet: {
+                    metadata: [{ $count: "total" }],
+                    data: [
+                        { $skip: (page - 1) * limit },
+                        { $limit: limit },
+                        { $project: { N: 1, L: 1, S: 1, createdAt: 1 } }
+                    ]
+                }
+            }
+        ];
+        const data = { list: await mongoOps.fnAggregate(teamSchema, pipeline) || null };
         if (_loanId && ObjectId.isValid(_loanId)) data.currentTeam = await mongoOps.fnFindOne(loanSchema, { BID, _id: new ObjectId(_loanId) }, { _teamId: 1, _id: 0 })
-        data = await aes.fnEncryptAES(data);
-        return httpResponse.fnSuccess(res, data);
+        return httpResponse.fnSuccess(res, await aes.fnEncryptAES(data));
     } catch (error) {
         logger.warn('fnListTeam', error);
         return httpResponse.fnBadRequest(res);
@@ -628,12 +687,12 @@ const fnUpdateMST = async (req, res) => {
         if (!BID || _id && !ObjectId.isValid(_id)) return httpResponse.fnPreConditionFailed(res);
 
         if (_id) {
-            const userPremission = await _fnVaildatingPermission(req.currentUserData._userId, 'master', 'edit');
+            const userPremission = await _fnVaildatingPermission(req.currentUserData._userId, 'masters', 'edit');
             if (!userPremission) return httpResponse.fnForbidden(res);
             await mongoOps.fnFindOneAndUpdate(mstSchema, { BID, _id: new ObjectId(_id) }, { V: req.body.V })
         }
         else {
-            const userPremission = await _fnVaildatingPermission(req.currentUserData._userId, 'master', 'add');
+            const userPremission = await _fnVaildatingPermission(req.currentUserData._userId, 'masters', 'add');
             if (!userPremission) return httpResponse.fnForbidden(res);
             await mongoOps.fnInsertOne(mstSchema, { BID, N: req.body.N, V: req.body.V });
         }
@@ -654,8 +713,24 @@ const fnListMST = async (req, res) => {
         if (!userPremission) return httpResponse.fnForbidden(res);
         const BID = parseInt(req.currentUserData.BID) || 0;
         if (!BID) return httpResponse.fnPreConditionFailed(res);
-        const data = await aes.fnEncryptAES(await mongoOps.fnFind(mstSchema, { BID }));
-        return httpResponse.fnSuccess(res, data);
+
+        const page = parseInt(req.query.page) || 1;
+        const limit = parseInt(req.query.limit) || 10;
+        const pipeline = [
+            { $match: { BID } },
+            {
+                $facet: {
+                    metadata: [{ $count: "total" }],
+                    data: [
+                        { $skip: (page - 1) * limit },
+                        { $limit: limit },
+                        { $project: { N: 1, V: 1, S: 1 } }
+                    ]
+                }
+            }
+        ];
+
+        return httpResponse.fnSuccess(res, await aes.fnEncryptAES(await mongoOps.fnAggregate(mstSchema, pipeline)));
     } catch (error) {
         logger.warn('fnListMST', error);
         return httpResponse.fnBadRequest(res);
@@ -699,8 +774,24 @@ const fnListRole = async (req, res) => {
         if (!userPremission) return httpResponse.fnForbidden(res);
         const BID = parseInt(req.currentUserData.BID) || 0;
         if (!BID) return httpResponse.fnPreConditionFailed(res);
-        const data = await aes.fnEncryptAES(await mongoOps.fnFind(roleSchema, { BID }));
-        return httpResponse.fnSuccess(res, data);
+
+        const page = parseInt(req.query.page) || 1;
+        const limit = parseInt(req.query.limit) || 10;
+        const pipeline = [
+            { $match: { BID } },
+            {
+                $facet: {
+                    metadata: [{ $count: "total" }],
+                    data: [
+                        { $skip: (page - 1) * limit },
+                        { $limit: limit },
+                        { $project: { N: 1, P: 1, S: 1 } }
+                    ]
+                }
+            }
+        ];
+
+        return httpResponse.fnSuccess(res, await aes.fnEncryptAES(await mongoOps.fnAggregate(roleSchema, pipeline)));
     } catch (error) {
         logger.warn('fnListRole', error);
         return httpResponse.fnBadRequest(res);
@@ -733,8 +824,23 @@ const fnListRating = async (req, res) => {
         const BID = parseInt(req.currentUserData.BID) || 0;
         const _loanId = req.query._loanId || null;
         if (!ObjectId.isValid(_loanId) || !BID) return httpResponse.fnConflict(res);
-        const data = await aes.fnEncryptAES(await mongoOps.fnFind(ratingSchema, { BID, _loanId: new ObjectId(_loanId) }));
-        return httpResponse.fnSuccess(res, data);
+        const page = parseInt(req.query.page) || 1;
+        const limit = parseInt(req.query.limit) || 10;
+        const pipeline = [
+            { $match: { BID, _loanId: new ObjectId(_loanId) } },
+            {
+                $facet: {
+                    metadata: [{ $count: "total" }],
+                    data: [
+                        { $skip: (page - 1) * limit },
+                        { $limit: limit },
+                        { $project: { A: 1, T: 1, DT: 1, O: 1, V: 1, L: 1 } }
+                    ]
+                }
+            }
+        ];
+
+        return httpResponse.fnSuccess(res, await aes.fnEncryptAES(await mongoOps.fnAggregate(ratingSchema, pipeline)));
     } catch (error) {
         logger.warn('fnListRating', error);
         return httpResponse.fnBadRequest(res);
@@ -793,7 +899,7 @@ const fnEditDocsDetails = async (req, res) => {
         delete req.body._loanId;
         const mongoUpdate = { $set: { ...req.body } };
         if (req.body.S == 'Verified') { mongoUpdate.$unset = { DEF: 1 } }
-        const result = await mongoOps.fnFindOneAndUpdate(selectedDocsSchema, { BID, _id: new ObjectId(_id) }, { mongoUpdate });
+        const result = await mongoOps.fnFindOneAndUpdate(selectedDocsSchema, { BID, _id: new ObjectId(_id) }, mongoUpdate);
         logger.debug('EDIT Docs Details...', selectedDocsSchema, result)
         return httpResponse.fnSuccess(res);
     } catch (error) {
@@ -821,9 +927,25 @@ const fnListDocsDetail = async (req, res) => {
         }
         if (!userPremission) return httpResponse.fnForbidden(res);
         if (!selectedDocsSchema) return httpResponse.fnConflict(res);
-        const DocsDetail = await mongoOps.fnFind(selectedDocsSchema, { BID, _loanId: new ObjectId(_loanId) }, { __v: 0 })
-        const data = await aes.fnEncryptAES(DocsDetail)
-        return httpResponse.fnSuccess(res, data);
+
+        const page = parseInt(req.query.page) || 1;
+        const limit = parseInt(req.query.limit) || 10;
+        const pipeline = [
+            { $match: { BID, _loanId: new ObjectId(_loanId) } },
+            {
+                $facet: {
+                    metadata: [{ $count: "total" }],
+                    data: [
+                        { $skip: (page - 1) * limit },
+                        { $limit: limit },
+                        { $project: { _v: 0 } }
+                    ]
+                }
+            }
+        ];
+
+        return httpResponse.fnSuccess(res, await aes.fnEncryptAES(await mongoOps.fnAggregate(selectedDocsSchema, pipeline)));
+
     } catch (error) {
         logger.warn('fnListDocsDetail', error);
         return httpResponse.fnBadRequest(res);
@@ -1002,9 +1124,24 @@ const fnListPaymentDetails = async (req, res) => {
         const _loanId = req.query._loanId || null
         if (!ObjectId.isValid(_loanId) || !BID) return httpResponse.fnPreConditionFailed(res);
         req.body.BID = parseInt(req.currentUserData.BID) || 0;//UUID
-        let data = await mongoOps.fnFindOne(paymentSchema, { BID, _loanId: new ObjectId(_loanId) })
-        data = await aes.fnEncryptAES(data);
-        return httpResponse.fnSuccess(res, data);
+        const page = parseInt(req.query.page) || 1;
+        const limit = parseInt(req.query.limit) || 10;
+        const pipeline = [
+            { $match: { BID, _loanId: new ObjectId(_loanId) } },
+            {
+                $facet: {
+                    metadata: [{ $count: "total" }],
+                    data: [
+                        { $skip: (page - 1) * limit },
+                        { $limit: limit },
+                        { $project: { _v: 0 } }
+                    ]
+                }
+            }
+        ];
+
+        return httpResponse.fnSuccess(res, await aes.fnEncryptAES(await mongoOps.fnAggregate(paymentSchema, pipeline)));
+
     } catch (error) {
         logger.warn('fnListPaymentDetails', error)
         return httpResponse.fnBadRequest(res);
@@ -1016,6 +1153,8 @@ const fnAssignListDocsDetail = async (req, res) => {
         const email = req.currentUserData.E;
         const BID = req.currentUserData.BID;
         const sessionName = req.query.SN;
+        const page = parseInt(req.query.page) || 1;
+        const limit = parseInt(req.query.limit) || 10;
         let selectedDocsSchemaName;
         const specificConditions = [];
 
@@ -1132,6 +1271,16 @@ const fnAssignListDocsDetail = async (req, res) => {
                         }
                     }
                 }
+            },
+            {
+                $facet: {
+                    metadata: [{ $count: "total" }],
+                    data: [
+                        { $skip: (page - 1) * limit },
+                        { $limit: limit },
+                        { $project: { _v: 0 } }
+                    ]
+                }
             }
         ];
         logger.debug('QuErY', helper.fnStringlyJSON(query));
@@ -1172,6 +1321,8 @@ const fnAssignListDefault = async (req, res) => {
     try {
         const email = req.currentUserData.E;
         const BID = req.currentUserData.BID;
+        const page = parseInt(req.query.page) || 1;
+        const limit = parseInt(req.query.limit) || 10;
         const query = [{
             $match: {
                 $expr: {
@@ -1262,7 +1413,7 @@ const fnAssignListDefault = async (req, res) => {
                 _id: "$_id",
                 N: { $first: "$N" }, L: { $first: "$L" }, BID: { $first: "$BID" },
                 loanDetails: {
-                    $push: {
+                    $addToSet: {
                         $cond: {
                             if: {
                                 $or: [
@@ -1274,9 +1425,6 @@ const fnAssignListDefault = async (req, res) => {
                         }
                     }
                 },
-                // transactions: { $push: "$transactions" }, compliance: { $push: "$compliance" },
-                // covenants: { $push: "$covenants" }, precedents: { $push: "$precedents" },
-                // subsequents: { $push: "$subsequents" }, payment: { $first: "$payment" }
                 transactions: { $addToSet: "$transactions" },
                 compliance: { $addToSet: "$compliance" },
                 covenants: { $addToSet: "$covenants" },
@@ -1285,33 +1433,43 @@ const fnAssignListDefault = async (req, res) => {
                 payment: { $addToSet: "$payment" },
             }
         },
+
         {
-            $project: {
-                _id: 1, N: 1, BID: 1,
-                loanDetails: {
-                    $cond: { if: { $gt: [{ $size: "$loanDetails" }, 0] }, then: "$loanDetails", else: "$$REMOVE" }
-                }, transactions: {
-                    $cond: { if: { $gt: [{ $size: "$transactions" }, 0] }, then: "$transactions", else: "$$REMOVE" }
-                }, compliance: {
-                    $cond: { if: { $gt: [{ $size: "$compliance" }, 0] }, then: "$compliance", else: "$$REMOVE" }
-                }, covenants: {
-                    $cond: { if: { $gt: [{ $size: "$covenants" }, 0] }, then: "$covenants", else: "$$REMOVE" }
-                }, precedents: {
-                    $cond: { if: { $gt: [{ $size: "$precedents" }, 0] }, then: "$precedents", else: "$$REMOVE" }
-                }, subsequents: {
-                    $cond: { if: { $gt: [{ $size: "$subsequents" }, 0] }, then: "$subsequents", else: "$$REMOVE" }
-                }, payment: {
-                    $cond: {
-                        if: {
-                            $and: [
-                                { $ne: [{ $type: "$payment" }, "array"] },
-                                { $ne: [{ $type: "$payment" }, "missing"] },
-                                { $ne: [{ $type: "$payment" }, "null"] }
-                            ]
-                        },
-                        then: "$payment", else: "$$REMOVE"
+            $facet: {
+                metadata: [{ $count: "total" }],
+                data: [
+                    { $skip: (page - 1) * limit },
+                    { $limit: limit },
+                    {
+                        $project: {
+                            _id: 1, N: 1, BID: 1,
+                            loanDetails: {
+                                $cond: { if: { $gt: [{ $size: "$loanDetails" }, 0] }, then: "$loanDetails", else: "$$REMOVE" }
+                            }, transactions: {
+                                $cond: { if: { $gt: [{ $size: "$transactions" }, 0] }, then: "$transactions", else: "$$REMOVE" }
+                            }, compliance: {
+                                $cond: { if: { $gt: [{ $size: "$compliance" }, 0] }, then: "$compliance", else: "$$REMOVE" }
+                            }, covenants: {
+                                $cond: { if: { $gt: [{ $size: "$covenants" }, 0] }, then: "$covenants", else: "$$REMOVE" }
+                            }, precedents: {
+                                $cond: { if: { $gt: [{ $size: "$precedents" }, 0] }, then: "$precedents", else: "$$REMOVE" }
+                            }, subsequents: {
+                                $cond: { if: { $gt: [{ $size: "$subsequents" }, 0] }, then: "$subsequents", else: "$$REMOVE" }
+                            }, payment: {
+                                $cond: {
+                                    if: {
+                                        $and: [
+                                            { $ne: [{ $type: "$payment" }, "array"] },
+                                            { $ne: [{ $type: "$payment" }, "missing"] },
+                                            { $ne: [{ $type: "$payment" }, "null"] }
+                                        ]
+                                    },
+                                    then: "$payment", else: "$$REMOVE"
+                                }
+                            }
+                        }
                     }
-                }
+                ]
             }
         }
         ];
@@ -1331,6 +1489,8 @@ const fnAssignListCriticalCase = async (req, res) => {
     try {
         const email = req.currentUserData.E;
         const BID = req.currentUserData.BID;
+        const page = parseInt(req.query.page) || 1;
+        const limit = parseInt(req.query.limit) || 10;
         const query =
             [{
                 $match: {
@@ -1391,7 +1551,7 @@ const fnAssignListCriticalCase = async (req, res) => {
                     N: { $first: "$N" }, L: { $first: "$L" }, BID: { $first: "$BID" },
                     loanDetails:
                     {
-                        $push: {
+                        $addToSet: {
                             $cond: {
                                 if: {
                                     $or: [
@@ -1405,9 +1565,7 @@ const fnAssignListCriticalCase = async (req, res) => {
                             }
                         }
                     },
-                    // transactions: { $push: "$transactions" }, compliance: { $push: "$compliance" },
-                    // covenants: { $push: "$covenants" }, precedents: { $push: "$precedents" },
-                    // subsequents: { $push: "$subsequents" }
+
                     transactions: { $addToSet: "$transactions" },
                     compliance: { $addToSet: "$compliance" },
                     covenants: { $addToSet: "$covenants" },
@@ -1417,14 +1575,23 @@ const fnAssignListCriticalCase = async (req, res) => {
                 }
             },
             {
-                $project: {
-                    _id: 1, N: 1, BID: 1,
-                    loanDetails: { $cond: { if: { $gt: [{ $size: "$loanDetails" }, 0] }, then: "$loanDetails", else: "$$REMOVE" } },
-                    transactions: { $cond: { if: { $gt: [{ $size: "$transactions" }, 0] }, then: "$transactions", else: "$$REMOVE" } },
-                    compliance: { $cond: { if: { $gt: [{ $size: "$compliance" }, 0] }, then: "$compliance", else: "$$REMOVE" } },
-                    covenants: { $cond: { if: { $gt: [{ $size: "$covenants" }, 0] }, then: "$covenants", else: "$$REMOVE" } },
-                    precedents: { $cond: { if: { $gt: [{ $size: "$precedents" }, 0] }, then: "$precedents", else: "$$REMOVE" } },
-                    subsequents: { $cond: { if: { $gt: [{ $size: "$subsequents" }, 0] }, then: "$subsequents", else: "$$REMOVE" } }
+                $facet: {
+                    metadata: [{ $count: "total" }],
+                    data: [
+                        { $skip: (page - 1) * limit },
+                        { $limit: limit },
+                        {
+                            $project: {
+                                _id: 1, N: 1, BID: 1,
+                                loanDetails: { $cond: { if: { $gt: [{ $size: "$loanDetails" }, 0] }, then: "$loanDetails", else: "$$REMOVE" } },
+                                transactions: { $cond: { if: { $gt: [{ $size: "$transactions" }, 0] }, then: "$transactions", else: "$$REMOVE" } },
+                                compliance: { $cond: { if: { $gt: [{ $size: "$compliance" }, 0] }, then: "$compliance", else: "$$REMOVE" } },
+                                covenants: { $cond: { if: { $gt: [{ $size: "$covenants" }, 0] }, then: "$covenants", else: "$$REMOVE" } },
+                                precedents: { $cond: { if: { $gt: [{ $size: "$precedents" }, 0] }, then: "$precedents", else: "$$REMOVE" } },
+                                subsequents: { $cond: { if: { $gt: [{ $size: "$subsequents" }, 0] }, then: "$subsequents", else: "$$REMOVE" } }
+                            }
+                        }
+                    ]
                 }
             }
             ];
@@ -1522,13 +1689,14 @@ const _fnVaildatingPermission = async (_id, moduleName = null, sPremission = 'ac
     try {
         const userPermissionDoc = await mongoOps.fnFindById(userSchema, _id, { UP: 1, _id: 0 });
         const userPermission = userPermissionDoc ? userPermissionDoc.UP : null;
-
+        // logger.debug(userPermission)
         if (!userPermission) return false;
 
+        // logger.debug(moduleName, sPremission, userPermission[moduleName])
         if (!flag) return userPermission[moduleName] && userPermission[moduleName].includes(sPremission);
         else return userPermission[moduleName] && userPermission[moduleName].docs && userPermission[moduleName].docs.includes(sPremission);
 
-        return null;
+        // return null;
     } catch (error) {
         logger.warn('_fnVaildatingPermission', error);
         return false;
@@ -1563,7 +1731,6 @@ const _fnGetPermission = async (_id, moduleName = null) => {
     }
 }
 
-
 const _fnGetModulePermission = async (_userId = null, moduleName = null, action = null) => {
 
     const aPremission = await mongoOps.fnFindOne(userSchema, { _id: new ObjectId(_userId) }, { _id: 0, UP: 1 })
@@ -1577,7 +1744,6 @@ const _fnGetModulePermission = async (_userId = null, moduleName = null, action 
     // return true;
     // return false;
 }
-
 
 const _fnSendNotification = async (schema, status, email) => {
     return await _sendEmail({
