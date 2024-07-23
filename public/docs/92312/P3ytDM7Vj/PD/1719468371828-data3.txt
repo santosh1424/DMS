@@ -1,3 +1,0 @@
-data3.txt
-
-test data 3
