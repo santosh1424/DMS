@@ -369,7 +369,8 @@ const fnListLoan = async (req, res) => {
             if (type == 'Z') query.Z = { $in: value };//Zone
             if (type == 'I') query.I = { $in: value };//Industry
         }
-        const data = await aes.fnEncryptAES(await mongoOps.fnFind(loanSchema, query));
+        const loanList = await mongoOps.fnFind(loanSchema, query)
+        const data = await aes.fnEncryptAES(loanList);
         return httpResponse.fnSuccess(res, data);
     } catch (error) {
         logger.warn('fnListLoan', error)
@@ -628,12 +629,12 @@ const fnUpdateMST = async (req, res) => {
         if (!BID || _id && !ObjectId.isValid(_id)) return httpResponse.fnPreConditionFailed(res);
 
         if (_id) {
-            const userPremission = await _fnVaildatingPermission(req.currentUserData._userId, 'master', 'edit');
+            const userPremission = await _fnVaildatingPermission(req.currentUserData._userId, 'masters', 'edit');
             if (!userPremission) return httpResponse.fnForbidden(res);
             await mongoOps.fnFindOneAndUpdate(mstSchema, { BID, _id: new ObjectId(_id) }, { V: req.body.V })
         }
         else {
-            const userPremission = await _fnVaildatingPermission(req.currentUserData._userId, 'master', 'add');
+            const userPremission = await _fnVaildatingPermission(req.currentUserData._userId, 'masters', 'add');
             if (!userPremission) return httpResponse.fnForbidden(res);
             await mongoOps.fnInsertOne(mstSchema, { BID, N: req.body.N, V: req.body.V });
         }
@@ -1522,13 +1523,14 @@ const _fnVaildatingPermission = async (_id, moduleName = null, sPremission = 'ac
     try {
         const userPermissionDoc = await mongoOps.fnFindById(userSchema, _id, { UP: 1, _id: 0 });
         const userPermission = userPermissionDoc ? userPermissionDoc.UP : null;
-
+        // logger.debug(userPermission)
         if (!userPermission) return false;
 
+        // logger.debug(moduleName, sPremission, userPermission[moduleName])
         if (!flag) return userPermission[moduleName] && userPermission[moduleName].includes(sPremission);
         else return userPermission[moduleName] && userPermission[moduleName].docs && userPermission[moduleName].docs.includes(sPremission);
 
-        return null;
+        // return null;
     } catch (error) {
         logger.warn('_fnVaildatingPermission', error);
         return false;
@@ -1563,7 +1565,6 @@ const _fnGetPermission = async (_id, moduleName = null) => {
     }
 }
 
-
 const _fnGetModulePermission = async (_userId = null, moduleName = null, action = null) => {
 
     const aPremission = await mongoOps.fnFindOne(userSchema, { _id: new ObjectId(_userId) }, { _id: 0, UP: 1 })
@@ -1577,7 +1578,6 @@ const _fnGetModulePermission = async (_userId = null, moduleName = null, action 
     // return true;
     // return false;
 }
-
 
 const _fnSendNotification = async (schema, status, email) => {
     return await _sendEmail({
