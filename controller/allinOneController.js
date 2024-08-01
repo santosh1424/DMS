@@ -1764,7 +1764,7 @@ const fnMSTListCriticalCase = async (req, res) => {
                 }
             }
         ];
-        logger.debug('{MST}Critial CaSe QuErY', helper.fnStringlyJSON(query));
+        logger.debug('{MST} Critial CaSe QuErY', helper.fnStringlyJSON(query));
         let output = await mongoOps.fnAggregate(teamSchema, query);
 
         const data = await aes.fnEncryptAES(output);
