@@ -1226,7 +1226,7 @@ const fnAssignListDocsDetail = async (req, res) => {
                 }
             },
             {
-                $unwind: "$loanDetails" // Unwind the loanDetails array
+                $unwind: "$loanDetails", // Unwind the loanDetails array
             },
             {
                 $lookup: {
@@ -1323,155 +1323,124 @@ const fnAssignListDefault = async (req, res) => {
         const BID = req.currentUserData.BID;
         const page = parseInt(req.query.page) || 1;
         const limit = parseInt(req.query.limit) || 10;
-        const query = [{
-            $match: {
-                $expr: {
-                    $and: [{
-                        $or: [
-                            { $eq: ["$L", email] },
-                            { $in: [email, { $ifNull: ["$TD.M", []] }] },
-                            { $in: [email, { $ifNull: ["$TD.C", []] }] },
-                            { $in: [email, { $ifNull: ["$CD.M", []] }] },
-                            { $in: [email, { $ifNull: ["$CD.C", []] }] },
-                            { $in: [email, { $ifNull: ["$C.M", []] }] },
-                            { $in: [email, { $ifNull: ["$C.C", []] }] },
-                            { $in: [email, { $ifNull: ["$CP.M", []] }] },
-                            { $in: [email, { $ifNull: ["$CP.C", []] }] },
-                            { $in: [email, { $ifNull: ["$CS.M", []] }] },
-                            { $in: [email, { $ifNull: ["$CS.C", []] }] },
-                            { $in: [email, { $ifNull: ["$PD.M", []] }] },
-                            { $in: [email, { $ifNull: ["$PD.C", []] }] }
+        const sessionName = req.query.SN || null;
+        let selectedDocsSchemaName;
+        const specificConditions = [];
+        // Selection of Schema 
+        switch (sessionName) {
+            case 'TD':
+                selectedDocsSchemaName = "transaction_models";
+                specificConditions.push(
+                    { $in: [email, { $ifNull: ["$TD.M", []] }] },
+                    { $in: [email, { $ifNull: ["$TD.C", []] }] }
+                );
+                break;
+            case 'CD':
+                selectedDocsSchemaName = "compliance_models";
+                specificConditions.push(
+                    { $in: [email, { $ifNull: ["$CD.M", []] }] },
+                    { $in: [email, { $ifNull: ["$CD.C", []] }] }
+                );
+                break;
+            case 'C':
+                selectedDocsSchemaName = "covenants_models";
+                specificConditions.push(
+                    { $in: [email, { $ifNull: ["$C.M", []] }] },
+                    { $in: [email, { $ifNull: ["$C.C", []] }] }
+                );
+                break;
+            case 'CP':
+                selectedDocsSchemaName = "precedent_models";
+                specificConditions.push(
+                    { $in: [email, { $ifNull: ["$CP.M", []] }] },
+                    { $in: [email, { $ifNull: ["$CP.C", []] }] }
+                );
+                break;
+            case 'CS':
+                selectedDocsSchemaName = "subsequent_models";
+                specificConditions.push(
+                    { $in: [email, { $ifNull: ["$CS.M", []] }] },
+                    { $in: [email, { $ifNull: ["$CS.C", []] }] }
+                );
+                break;
+            case 'PD':
+                selectedDocsSchemaName = "payment_models";
+                specificConditions.push(
+                    { $in: [email, { $ifNull: ["$PD.M", []] }] },
+                    { $in: [email, { $ifNull: ["$PD.C", []] }] }
+                );
+                break;
+            default:
+                return httpResponse.fnConflict(res);
+        }
+        const query = [
+            {
+                $match: {
+                    $expr: {
+                        $and: [
+                            { $or: [{ $eq: ["$L", email] }, ...specificConditions] },
+                            { $eq: ["$BID", BID] }
                         ]
-                    },
-                    { $eq: ["$BID", BID] }
-                    ]
-                }
-            }
-        },
-        { $lookup: { from: "loan_models", localField: "_id", foreignField: "_teamId", as: "loanDetails" } },
-        { $unwind: { path: "$loanDetails", preserveNullAndEmptyArrays: true } },
-
-        {
-            $lookup: {
-                from: "transaction_models", let: { loanId: "$loanDetails._id" },
-                pipeline: [{ $match: { $expr: { $and: [{ $eq: ["$_loanId", "$$loanId"] }, { $eq: ["$DEF", 1] }] } } }], as: "transactions"
-            }
-        },
-        { $unwind: { path: "$transactions", preserveNullAndEmptyArrays: true } },
-
-        {
-            $lookup: {
-                from: "compliance_models", let: { loanId: "$loanDetails._id" },
-                pipeline: [{ $match: { $expr: { $and: [{ $eq: ["$_loanId", "$$loanId"] }, { $eq: ["$DEF", 1] }] } } }], as: "compliance"
-            }
-        },
-        { $unwind: { path: "$compliance", preserveNullAndEmptyArrays: true } },
-
-        {
-            $lookup: {
-                from: "covenants_models", let: { loanId: "$loanDetails._id" },
-                pipeline: [{ $match: { $expr: { $and: [{ $eq: ["$_loanId", "$$loanId"] }, { $eq: ["$DEF", 1] }] } } }], as: "covenants"
-            }
-        },
-        { $unwind: { path: "$covenants", preserveNullAndEmptyArrays: true } },
-
-        {
-            $lookup: {
-                from: "precedent_models", let: { loanId: "$loanDetails._id" },
-                pipeline: [{ $match: { $expr: { $and: [{ $eq: ["$_loanId", "$$loanId"] }, { $eq: ["$DEF", 1] }] } } }], as: "precedents"
-            }
-        },
-        {
-            $unwind: {
-                path: "$precedents", preserveNullAndEmptyArrays: true
-            }
-        },
-        {
-            $lookup: {
-                from: "subsequent_models", let: { loanId: "$loanDetails._id" },
-                pipeline: [{ $match: { $expr: { $and: [{ $eq: ["$_loanId", "$$loanId"] }, { $eq: ["$DEF", 1] }] } } }], as: "subsequents"
-            }
-        },
-        {
-            $unwind: {
-                path: "$subsequents", preserveNullAndEmptyArrays: true
-            }
-        },
-        {
-            $lookup: {
-                from: "payment_models", let: { loanId: "$loanDetails._id" },
-                pipeline: [{ $match: { $expr: { $and: [{ $eq: ["$_loanId", "$$loanId"] }, { $eq: ["$DEF", 1] }] } } }], as: "payment"
-            }
-        },
-        {
-            $unwind: {
-                path: "$payment", preserveNullAndEmptyArrays: true
-            }
-        },
-        {
-            $group: {
-                _id: "$_id",
-                N: { $first: "$N" }, L: { $first: "$L" }, BID: { $first: "$BID" },
-                loanDetails: {
-                    $addToSet: {
-                        $cond: {
-                            if: {
-                                $or: [
-                                    { $eq: ["$transactions._loanId", "$loanDetails._id"] }, { $eq: ["$compliance._loanId", "$loanDetails._id"] },
-                                    { $eq: ["$covenants._loanId", "$loanDetails._id"] }, { $eq: ["$precedents._loanId", "$loanDetails._id"] },
-                                    { $eq: ["$subsequents._loanId", "$loanDetails._id"] }, { $eq: ["$payment._loanId", "$loanDetails._id"] }
-                                ]
-                            }, then: "$loanDetails", else: "$$REMOVE"
-                        }
                     }
-                },
-                transactions: { $addToSet: "$transactions" },
-                compliance: { $addToSet: "$compliance" },
-                covenants: { $addToSet: "$covenants" },
-                precedents: { $addToSet: "$precedents" },
-                subsequents: { $addToSet: "$subsequents" },
-                payment: { $addToSet: "$payment" },
-            }
-        },
-
-        {
-            $facet: {
-                metadata: [{ $count: "total" }],
-                data: [
-                    { $skip: (page - 1) * limit },
-                    { $limit: limit },
-                    {
-                        $project: {
-                            _id: 1, N: 1, BID: 1,
-                            loanDetails: {
-                                $cond: { if: { $gt: [{ $size: "$loanDetails" }, 0] }, then: "$loanDetails", else: "$$REMOVE" }
-                            }, transactions: {
-                                $cond: { if: { $gt: [{ $size: "$transactions" }, 0] }, then: "$transactions", else: "$$REMOVE" }
-                            }, compliance: {
-                                $cond: { if: { $gt: [{ $size: "$compliance" }, 0] }, then: "$compliance", else: "$$REMOVE" }
-                            }, covenants: {
-                                $cond: { if: { $gt: [{ $size: "$covenants" }, 0] }, then: "$covenants", else: "$$REMOVE" }
-                            }, precedents: {
-                                $cond: { if: { $gt: [{ $size: "$precedents" }, 0] }, then: "$precedents", else: "$$REMOVE" }
-                            }, subsequents: {
-                                $cond: { if: { $gt: [{ $size: "$subsequents" }, 0] }, then: "$subsequents", else: "$$REMOVE" }
-                            }, payment: {
-                                $cond: {
-                                    if: {
-                                        $and: [
-                                            { $ne: [{ $type: "$payment" }, "array"] },
-                                            { $ne: [{ $type: "$payment" }, "missing"] },
-                                            { $ne: [{ $type: "$payment" }, "null"] }
-                                        ]
-                                    },
-                                    then: "$payment", else: "$$REMOVE"
+                }
+            },
+            {
+                $lookup: {
+                    from: "loan_models",
+                    localField: "_id",
+                    foreignField: "_teamId",
+                    as: "loanDetails"
+                }
+            },
+            {
+                $unwind: "$loanDetails"
+            },
+            {
+                $lookup: {
+                    from: selectedDocsSchemaName,
+                    localField: "loanDetails._id",
+                    foreignField: "_loanId",
+                    as: "docsDetails",
+                    pipeline: [
+                        {
+                            $match: {
+                                $expr: {
+                                    $eq: ["$DEF", 1]
                                 }
                             }
                         }
-                    }
-                ]
+                    ]
+                }
+            },
+            {
+                $unwind: "$docsDetails"
+            },
+            {
+                $project: {
+                    _id: 1,
+                    L: 1,
+                    N: 1,
+                    _loanId: "$loanDetails._id",
+                    AID: "$loanDetails.AID",
+                    SD: "$loanDetails.SD",
+                    DN: "$docsDetails.N",
+                    DC: "$docsDetails.C",
+                    SD: "$docsDetails.SD",
+                    ED: "$docsDetails.ED",
+                    DS: "$docsDetails.S"
+                }
+            },
+
+            {
+                $facet: {
+                    metadata: [{ $count: "total" }],
+                    data: [
+                        { $skip: (page - 1) * limit },
+                        { $limit: limit },
+                        { $project: { _v: 0 } }
+                    ]
+                }
             }
-        }
         ];
         logger.debug('DefaulteR QuErY', helper.fnStringlyJSON(query));
         let output = await mongoOps.fnAggregate(teamSchema, query);
@@ -1491,110 +1460,127 @@ const fnAssignListCriticalCase = async (req, res) => {
         const BID = req.currentUserData.BID;
         const page = parseInt(req.query.page) || 1;
         const limit = parseInt(req.query.limit) || 10;
-        const query =
-            [{
+        const sessionName = req.query.SN || null;
+        let selectedDocsSchemaName;
+        const specificConditions = [];
+        // Selection of Schema 
+        switch (sessionName) {
+            case 'TD':
+                selectedDocsSchemaName = "transaction_models";
+                specificConditions.push(
+                    { $in: [email, { $ifNull: ["$TD.M", []] }] },
+                    { $in: [email, { $ifNull: ["$TD.C", []] }] }
+                );
+                break;
+            case 'CD':
+                selectedDocsSchemaName = "compliance_models";
+                specificConditions.push(
+                    { $in: [email, { $ifNull: ["$CD.M", []] }] },
+                    { $in: [email, { $ifNull: ["$CD.C", []] }] }
+                );
+                break;
+            case 'C':
+                selectedDocsSchemaName = "covenants_models";
+                specificConditions.push(
+                    { $in: [email, { $ifNull: ["$C.M", []] }] },
+                    { $in: [email, { $ifNull: ["$C.C", []] }] }
+                );
+                break;
+            case 'CP':
+                selectedDocsSchemaName = "precedent_models";
+                specificConditions.push(
+                    { $in: [email, { $ifNull: ["$CP.M", []] }] },
+                    { $in: [email, { $ifNull: ["$CP.C", []] }] }
+                );
+                break;
+            case 'CS':
+                selectedDocsSchemaName = "subsequent_models";
+                specificConditions.push(
+                    { $in: [email, { $ifNull: ["$CS.M", []] }] },
+                    { $in: [email, { $ifNull: ["$CS.C", []] }] }
+                );
+                break;
+            case 'PD':
+                selectedDocsSchemaName = "payment_models";
+                specificConditions.push(
+                    { $in: [email, { $ifNull: ["$PD.M", []] }] },
+                    { $in: [email, { $ifNull: ["$PD.C", []] }] }
+                );
+                break;
+            default:
+                return httpResponse.fnConflict(res);
+        }
+        const query = [
+            {
                 $match: {
                     $expr: {
-                        $and: [{
-                            $or:
-                                [{ $eq: ["$L", email] },
-                                { $in: [email, { $ifNull: ["$TD.M", []] }] },
-                                { $in: [email, { $ifNull: ["$TD.C", []] }] },
-                                { $in: [email, { $ifNull: ["$CD.M", []] }] },
-                                { $in: [email, { $ifNull: ["$CD.C", []] }] },
-                                { $in: [email, { $ifNull: ["$C.M", []] }] },
-                                { $in: [email, { $ifNull: ["$C.C", []] }] },
-                                { $in: [email, { $ifNull: ["$CP.M", []] }] },
-                                { $in: [email, { $ifNull: ["$CP.C", []] }] },
-                                { $in: [email, { $ifNull: ["$CS.M", []] }] },
-                                { $in: [email, { $ifNull: ["$CS.C", []] }] },
-                                { $in: [email, { $ifNull: ["$PD.M", []] }] },
-                                { $in: [email, { $ifNull: ["$PD.C", []] }] }]
-                        },
-                        { $eq: ["$BID", BID] }]
+                        $and: [
+                            { $or: [{ $eq: ["$L", email] }, ...specificConditions] },
+                            { $eq: ["$BID", BID] }
+                        ]
                     }
                 }
-            }, {
-                $lookup: { from: "loan_models", localField: "_id", foreignField: "_teamId", as: "loanDetails" }
-            }, {
-                $unwind: { path: "$loanDetails", preserveNullAndEmptyArrays: true }
             },
             {
-                $lookup: { from: "transaction_models", let: { loanId: "$loanDetails._id" }, pipeline: [{ $match: { $expr: { $and: [{ $eq: ["$_loanId", "$$loanId"] }, { $eq: ["$P", "High"] }] } } }], as: "transactions" }
-            }, {
-                $unwind: { path: "$transactions", preserveNullAndEmptyArrays: true }
-            },
-            {
-                $lookup: { from: "compliance_models", let: { loanId: "$loanDetails._id" }, pipeline: [{ $match: { $expr: { $and: [{ $eq: ["$_loanId", "$$loanId"] }, { $eq: ["$P", "High"] }] } } }], as: "compliance" }
-            }, {
-                $unwind: { path: "$compliance", preserveNullAndEmptyArrays: true }
-            },
-            {
-                $lookup: { from: "covenants_models", let: { loanId: "$loanDetails._id" }, pipeline: [{ $match: { $expr: { $and: [{ $eq: ["$_loanId", "$$loanId"] }, { $eq: ["$P", "High"] }] } } }], as: "covenants" }
-            }, {
-                $unwind: { path: "$covenants", preserveNullAndEmptyArrays: true }
-            },
-            {
-                $lookup: { from: "precedent_models", let: { loanId: "$loanDetails._id" }, pipeline: [{ $match: { $expr: { $and: [{ $eq: ["$_loanId", "$$loanId"] }, { $eq: ["$P", "High"] }] } } }], as: "precedents" }
-            }, {
-                $unwind: { path: "$precedents", preserveNullAndEmptyArrays: true }
-            },
-            {
-                $lookup: { from: "subsequent_models", let: { loanId: "$loanDetails._id" }, pipeline: [{ $match: { $expr: { $and: [{ $eq: ["$_loanId", "$$loanId"] }, { $eq: ["$P", "High"] }] } } }], as: "subsequents" }
-            }, {
-                $unwind: { path: "$subsequents", preserveNullAndEmptyArrays: true }
-            },
-            {
-                $group:
-                {
-                    _id: "$_id",
-                    N: { $first: "$N" }, L: { $first: "$L" }, BID: { $first: "$BID" },
-                    loanDetails:
-                    {
-                        $addToSet: {
-                            $cond: {
-                                if: {
-                                    $or: [
-                                        { $eq: ["$transactions._loanId", "$loanDetails._id"] },
-                                        { $eq: ["$compliance._loanId", "$loanDetails._id"] },
-                                        { $eq: ["$covenants._loanId", "$loanDetails._id"] },
-                                        { $eq: ["$precedents._loanId", "$loanDetails._id"] },
-                                        { $eq: ["$subsequents._loanId", "$loanDetails._id"] }]
-                                },
-                                then: "$loanDetails", else: "$$REMOVE"
-                            }
-                        }
-                    },
-
-                    transactions: { $addToSet: "$transactions" },
-                    compliance: { $addToSet: "$compliance" },
-                    covenants: { $addToSet: "$covenants" },
-                    precedents: { $addToSet: "$precedents" },
-                    subsequents: { $addToSet: "$subsequents" },
-                    // payment: { $addToSet: "$payment" },
+                $lookup: {
+                    from: "loan_models",
+                    localField: "_id",
+                    foreignField: "_teamId",
+                    as: "loanDetails"
                 }
             },
+            {
+                $unwind: "$loanDetails"
+            },
+            {
+                $lookup: {
+                    from: selectedDocsSchemaName,
+                    localField: "loanDetails._id",
+                    foreignField: "_loanId",
+                    as: "docsDetails",
+                    pipeline: [
+                        {
+                            $match: {
+                                $expr: {
+                                    $eq: ["$P", "High"]
+                                }
+                            }
+                        }
+                    ]
+                }
+            },
+            {
+                $unwind: "$docsDetails"
+            },
+            {
+                $project: {
+                    _id: 1,
+                    L: 1,
+                    N: 1,
+                    _loanId: "$loanDetails._id",
+                    AID: "$loanDetails.AID",
+                    SD: "$loanDetails.SD",
+                    DN: "$docsDetails.N",
+                    DC: "$docsDetails.C",
+                    SD: "$docsDetails.SD",
+                    ED: "$docsDetails.ED",
+                    DS: "$docsDetails.S",
+                    DP: "$docsDetails.P",
+
+                }
+            },
+
             {
                 $facet: {
                     metadata: [{ $count: "total" }],
                     data: [
                         { $skip: (page - 1) * limit },
                         { $limit: limit },
-                        {
-                            $project: {
-                                _id: 1, N: 1, BID: 1,
-                                loanDetails: { $cond: { if: { $gt: [{ $size: "$loanDetails" }, 0] }, then: "$loanDetails", else: "$$REMOVE" } },
-                                transactions: { $cond: { if: { $gt: [{ $size: "$transactions" }, 0] }, then: "$transactions", else: "$$REMOVE" } },
-                                compliance: { $cond: { if: { $gt: [{ $size: "$compliance" }, 0] }, then: "$compliance", else: "$$REMOVE" } },
-                                covenants: { $cond: { if: { $gt: [{ $size: "$covenants" }, 0] }, then: "$covenants", else: "$$REMOVE" } },
-                                precedents: { $cond: { if: { $gt: [{ $size: "$precedents" }, 0] }, then: "$precedents", else: "$$REMOVE" } },
-                                subsequents: { $cond: { if: { $gt: [{ $size: "$subsequents" }, 0] }, then: "$subsequents", else: "$$REMOVE" } }
-                            }
-                        }
+                        { $project: { _v: 0 } }
                     ]
                 }
             }
-            ];
+        ];
         logger.debug('Critial CaSe QuErY', helper.fnStringlyJSON(query));
         let output = await mongoOps.fnAggregate(teamSchema, query);
 
@@ -1606,6 +1592,188 @@ const fnAssignListCriticalCase = async (req, res) => {
     }
 }
 
+const fnMSTListDefault = async (req, res) => {
+    try {
+        const BID = req.currentUserData.BID;
+        const page = parseInt(req.query.page) || 1;
+        const limit = parseInt(req.query.limit) || 10;
+        const sessionName = req.query.SN || null;
+        let selectedDocsSchemaName;
+        // Selection of Schema 
+        switch (sessionName) {
+            case 'TD': selectedDocsSchemaName = "transaction_models"; break;
+            case 'CD': selectedDocsSchemaName = "compliance_models"; break;
+            case 'C': selectedDocsSchemaName = "covenants_models"; break;
+            case 'CP': selectedDocsSchemaName = "precedent_models"; break;
+            case 'CS': selectedDocsSchemaName = "subsequent_models"; break;
+            case 'PD': selectedDocsSchemaName = "payment_models"; break;
+            default: return httpResponse.fnConflict(res);
+        }
+        const query = [
+            {
+                $match: { BID }
+            },
+            {
+                $lookup: {
+                    from: "loan_models",
+                    localField: "_id",
+                    foreignField: "_teamId",
+                    as: "loanDetails"
+                }
+            },
+            {
+                $unwind: "$loanDetails"
+            },
+            {
+                $lookup: {
+                    from: selectedDocsSchemaName,
+                    localField: "loanDetails._id",
+                    foreignField: "_loanId",
+                    as: "docsDetails",
+                    pipeline: [
+                        {
+                            $match: {
+                                $expr: {
+                                    $eq: ["$DEF", 1]
+                                }
+                            }
+                        }
+                    ]
+                }
+            },
+            {
+                $unwind: "$docsDetails"
+            },
+            {
+                $project: {
+                    _id: 1,
+                    L: 1,
+                    N: 1,
+                    _loanId: "$loanDetails._id",
+                    AID: "$loanDetails.AID",
+                    SD: "$loanDetails.SD",
+                    DN: "$docsDetails.N",
+                    DC: "$docsDetails.C",
+                    SD: "$docsDetails.SD",
+                    ED: "$docsDetails.ED",
+                    DS: "$docsDetails.S"
+                }
+            },
+
+            {
+                $facet: {
+                    metadata: [{ $count: "total" }],
+                    data: [
+                        { $skip: (page - 1) * limit },
+                        { $limit: limit },
+                        { $project: { _v: 0 } }
+                    ]
+                }
+            }
+        ];
+        logger.debug('{MST} DefaulteR QuErY', helper.fnStringlyJSON(query));
+        let output = await mongoOps.fnAggregate(teamSchema, query);
+
+        const data = await aes.fnEncryptAES(output);
+        return httpResponse.fnSuccess(res, data);
+        // return output;
+    } catch (error) {
+        logger.warn('fnMSTListDefault', error);
+        return httpResponse.fnBadRequest(res);
+    }
+}
+
+const fnMSTListCriticalCase = async (req, res) => {
+    try {
+        const BID = req.currentUserData.BID;
+        const page = parseInt(req.query.page) || 1;
+        const limit = parseInt(req.query.limit) || 10;
+        const sessionName = req.query.SN || null;
+        let selectedDocsSchemaName;
+        // Selection of Schema 
+        switch (sessionName) {
+            case 'TD': selectedDocsSchemaName = "transaction_models"; break;
+            case 'CD': selectedDocsSchemaName = "compliance_models"; break;
+            case 'C': selectedDocsSchemaName = "covenants_models"; break;
+            case 'CP': selectedDocsSchemaName = "precedent_models"; break;
+            case 'CS': selectedDocsSchemaName = "subsequent_models"; break;
+            case 'PD': selectedDocsSchemaName = "payment_models"; break;
+            default: return httpResponse.fnConflict(res);
+        }
+        const query = [
+            {
+                $match: { BID }
+            },
+            {
+                $lookup: {
+                    from: "loan_models",
+                    localField: "_id",
+                    foreignField: "_teamId",
+                    as: "loanDetails"
+                }
+            },
+            {
+                $unwind: "$loanDetails"
+            },
+            {
+                $lookup: {
+                    from: selectedDocsSchemaName,
+                    localField: "loanDetails._id",
+                    foreignField: "_loanId",
+                    as: "docsDetails",
+                    pipeline: [
+                        {
+                            $match: {
+                                $expr: {
+                                    $eq: ["$P", "High"]
+                                }
+                            }
+                        }
+                    ]
+                }
+            },
+            {
+                $unwind: "$docsDetails"
+            },
+            {
+                $project: {
+                    _id: 1,
+                    L: 1,
+                    N: 1,
+                    _loanId: "$loanDetails._id",
+                    AID: "$loanDetails.AID",
+                    SD: "$loanDetails.SD",
+                    DN: "$docsDetails.N",
+                    DC: "$docsDetails.C",
+                    SD: "$docsDetails.SD",
+                    ED: "$docsDetails.ED",
+                    DS: "$docsDetails.S",
+                    DP: "$docsDetails.P",
+
+                }
+            },
+
+            {
+                $facet: {
+                    metadata: [{ $count: "total" }],
+                    data: [
+                        { $skip: (page - 1) * limit },
+                        { $limit: limit },
+                        { $project: { _v: 0 } }
+                    ]
+                }
+            }
+        ];
+        logger.debug('Critial CaSe QuErY', helper.fnStringlyJSON(query));
+        let output = await mongoOps.fnAggregate(teamSchema, query);
+
+        const data = await aes.fnEncryptAES(output);
+        return httpResponse.fnSuccess(res, data);
+    } catch (error) {
+        logger.warn('fnMSTListCriticalCase', error);
+        return httpResponse.fnBadRequest(res);
+    }
+}
 
 module.exports = {
     fnTestApp,
@@ -1653,7 +1821,9 @@ module.exports = {
     fnListMST,
     fnAssignListDocsDetail,
     fnListPaymentDetails,
-    fnTest
+    fnTest,
+    fnMSTListDefault,
+    fnMSTListCriticalCase
 }
 
 const _sendEmail = async (options) => {

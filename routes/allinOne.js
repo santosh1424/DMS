@@ -76,6 +76,10 @@ router.get('/downloadDocs', validate.fnAuthenticateToken, allinOneController.fnD
 router.get('/assignlistDocsDetail', validate.fnAuthenticateToken, allinOneController.fnAssignListDocsDetail);
 router.get('/assignlistDefault', validate.fnAuthenticateToken, allinOneController.fnAssignListDefault);
 router.get('/assignlistCriticalCases', validate.fnAuthenticateToken, allinOneController.fnAssignListCriticalCase);
+
+//Master Listing
+router.get('/mst/listDefault', validate.fnAuthenticateToken, allinOneController.fnMSTListDefault);
+router.get('/mst/listCriticalCases', validate.fnAuthenticateToken, allinOneController.fnMSTListCriticalCase);
 router.get('/sendMail', allinOneController.fnTest);
 
 
