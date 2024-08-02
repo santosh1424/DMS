@@ -24,7 +24,7 @@ const paymentSchema = new mongoose.Schema({
         type: Date,
         required: true
     },
-    CD: {
+    ND: {
         type: Date,
         required: true
     },

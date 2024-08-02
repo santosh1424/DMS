@@ -233,8 +233,19 @@ const fnListUser = async (req, res) => {
 
         const page = parseInt(req.query.page) || 1;
         const limit = parseInt(req.query.limit) || 10;
+        const query = BID ? { BID } : {};
+        const value = req.query.value || "";
+        const type = req.query.type || "";
+
+        if (value && type) {
+            if (type === 'N') {
+                query.N = { $regex: value, $options: 'i' };// Case-insensitive search
+            } else if (type === 'E') {
+                query.E = { $regex: value, $options: 'i' };// Case-insensitive search
+            }
+        }
         const pipeline = [
-            { $match: { BID } },
+            { $match: query },
             {
                 $facet: {
                     metadata: [{ $count: "total" }],
@@ -375,15 +386,27 @@ const fnListLoan = async (req, res) => {
         const userPremission = await _fnVaildatingPermission(req.currentUserData._userId, 'loan', 'access');
         if (!userPremission) return httpResponse.fnForbidden(res);
         const BID = parseInt(req.currentUserData.BID) || 0;
-        const type = req.query.T || null;
-        const value = req.query.V || null;
+        const pageType = req.query.pageType || null;
+        const pageValue = req.query.pageValue || null;
         const query = { BID }
-        if (type && Array.isArray(value) && value.length > 0) {
-            if (type == 'P') query.P = { $in: value };//Product
-            if (type == 'Z') query.Z = { $in: value };//Zone
-            if (type == 'I') query.I = { $in: value };//Industry
+        //Pages
+        if (pageType && Array.isArray(pageValue) && pageValue.length > 0) {
+            if (pageType == 'P') query.P = { $in: pageValue };//Product
+            if (pageType == 'Z') query.Z = { $in: pageValue };//Zone
+            if (pageType == 'I') query.I = { $in: pageValue };//Industry
         }
 
+        //filter
+        const value = req.query.value || "";
+        const type = req.query.type || "";
+
+        if (value && type) {
+            if (type === 'AID') {
+                query.AID = { $regex: value, $options: 'i' };// Case-insensitive search
+            } else if (type === 'CN') {
+                query.CN = { $regex: value, $options: 'i' };// Case-insensitive search
+            }
+        }
         const page = parseInt(req.query.page) || 1;
         const limit = parseInt(req.query.limit) || 10;
         const pipeline = [
@@ -1592,8 +1615,112 @@ const fnAssignListCriticalCase = async (req, res) => {
     }
 }
 
+const fnMSTListDocsDetail = async (req, res) => {
+    try {
+        const email = req.currentUserData.E;
+        const BID = req.currentUserData.BID;
+        const sessionName = req.query.SN;
+        const page = parseInt(req.query.page) || 1;
+        const limit = parseInt(req.query.limit) || 10;
+        let selectedDocsSchemaName;
+        switch (sessionName) {
+            case 'TD': selectedDocsSchemaName = "transaction_models"; break;
+            case 'CD': selectedDocsSchemaName = "compliance_models"; break;
+            case 'C': selectedDocsSchemaName = "covenants_models"; break;
+            case 'CP': selectedDocsSchemaName = "precedent_models"; break;
+            case 'CS': selectedDocsSchemaName = "subsequent_models"; break;
+            case 'PD': selectedDocsSchemaName = "payment_models"; break;
+            default: return httpResponse.fnConflict(res);
+        }
+
+
+        const query = [
+            {
+                $match: {
+                    BID
+                }
+            },
+            {
+                $lookup: {
+                    from: "loan_models",
+                    localField: "_id",
+                    foreignField: "_teamId",
+                    as: "loanDetails"
+                }
+            },
+            {
+                $unwind: "$loanDetails", // Unwind the loanDetails array
+            },
+            {
+                $lookup: {
+                    from: selectedDocsSchemaName,
+                    localField: "loanDetails._id",
+                    foreignField: "_loanId",
+                    as: "docsDetails"
+                }
+            },
+            {
+                $unwind: "$docsDetails"
+            },
+            {
+                $project: {
+                    _id: 1,
+                    L: 1,
+                    N: 1,
+                    _loanId: "$loanDetails._id",
+                    AID: "$loanDetails.AID",
+                    CN: "$loanDetails.CN",
+                    SD: "$loanDetails.SD",
+                    S: "$docsDetails.S"
+                }
+            },
+            {
+                $group:
+
+                {
+                    _id: "$_loanId",
+                    AID: {
+                        $first: "$AID"
+                    },
+                    CN: {
+                        $first: "$CN"
+                    },
+                    SD: {
+                        $first: "$SD"
+                    },
+                    details: {
+                        $push: {
+                            S: "$S"
+                        }
+                    }
+                }
+            },
+            {
+                $facet: {
+                    metadata: [{ $count: "total" }],
+                    data: [
+                        { $skip: (page - 1) * limit },
+                        { $limit: limit },
+                        { $project: { _v: 0 } }
+                    ]
+                }
+            }
+        ];
+        logger.debug('{MST} QuErY', helper.fnStringlyJSON(query));
+        let output = await mongoOps.fnAggregate(teamSchema, query);
+        const data = await aes.fnEncryptAES(output);
+        return httpResponse.fnSuccess(res, data);
+        // return output;
+    } catch (error) {
+        logger.warn('fnMSTListDocsDetail', error);
+        return httpResponse.fnBadRequest(res);
+    }
+}
+
 const fnMSTListDefault = async (req, res) => {
     try {
+        // const userPremission = await _fnVaildatingPermission(req.currentUserData._userId, 'mst_defaultor', 'access');
+        // if (!userPremission) return httpResponse.fnForbidden(res);
         const BID = req.currentUserData.BID;
         const page = parseInt(req.query.page) || 1;
         const limit = parseInt(req.query.limit) || 10;
@@ -1685,6 +1812,8 @@ const fnMSTListDefault = async (req, res) => {
 
 const fnMSTListCriticalCase = async (req, res) => {
     try {
+        // const userPremission = await _fnVaildatingPermission(req.currentUserData._userId, 'mst_critical', 'access');
+        // if (!userPremission) return httpResponse.fnForbidden(res);
         const BID = req.currentUserData.BID;
         const page = parseInt(req.query.page) || 1;
         const limit = parseInt(req.query.limit) || 10;
@@ -1822,6 +1951,7 @@ module.exports = {
     fnAssignListDocsDetail,
     fnListPaymentDetails,
     fnTest,
+    fnMSTListDocsDetail,
     fnMSTListDefault,
     fnMSTListCriticalCase
 }
