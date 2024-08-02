@@ -497,7 +497,7 @@ const fnListContact = async (req, res) => {
                     data: [
                         { $skip: (page - 1) * limit },
                         { $limit: limit },
-                        { $project: { N: 1, E: 1, D: 1 } }
+                        { $project: { PN: 1, CE: 1, D: 1 } }
                     ]
                 }
             }
