@@ -12,12 +12,12 @@ const fnCheckEndDate = async () => {
     try {
         cron.schedule('*/5  * * * *', async () => {
             const data = {}
-            data.CD = await mongoOps.fnFindOneAndUpdate(complianceSchema, { ED: { $lte: new Date() }, DEF: { $exists: 0 }, S: { $ne: 'Complete' } }, { DEF: 1 });
-            data.TD = await mongoOps.fnFindOneAndUpdate(transactionSchema, { ED: { $lte: new Date() }, DEF: { $exists: 0 }, S: { $ne: 'Complete' } }, { DEF: 1 });
-            data.C = await mongoOps.fnFindOneAndUpdate(covenantsSchema, { ED: { $lte: new Date() }, DEF: { $exists: 0 }, S: { $ne: 'Complete' } }, { DEF: 1 });
-            data.CS = await mongoOps.fnFindOneAndUpdate(subsequentSchema, { ED: { $lte: new Date() }, DEF: { $exists: 0 }, S: { $ne: 'Complete' } }, { DEF: 1 });
-            data.CP = await mongoOps.fnFindOneAndUpdate(precedentSchema, { ED: { $lte: new Date() }, DEF: { $exists: 0 }, S: { $ne: 'Complete' } }, { DEF: 1 });
-            data.GS = await mongoOps.fnFindOneAndUpdate(paymentSchema, { ND: { $lte: new Date() }, DEF: { $exists: 0 }, S: { $ne: 'Complete' } }, { DEF: 1 });
+            data.CD = await mongoOps.fnFindOneAndUpdate(complianceSchema, { ED: { $lte: new Date() }, DEF: { $exists: 0 }, S: { $ne: 'Verified' } }, { DEF: 1 });
+            data.TD = await mongoOps.fnFindOneAndUpdate(transactionSchema, { ED: { $lte: new Date() }, DEF: { $exists: 0 }, S: { $ne: 'Verified' } }, { DEF: 1 });
+            data.C = await mongoOps.fnFindOneAndUpdate(covenantsSchema, { ED: { $lte: new Date() }, DEF: { $exists: 0 }, S: { $ne: 'Verified' } }, { DEF: 1 });
+            data.CS = await mongoOps.fnFindOneAndUpdate(subsequentSchema, { ED: { $lte: new Date() }, DEF: { $exists: 0 }, S: { $ne: 'Verified' } }, { DEF: 1 });
+            data.CP = await mongoOps.fnFindOneAndUpdate(precedentSchema, { ED: { $lte: new Date() }, DEF: { $exists: 0 }, S: { $ne: 'Verified' } }, { DEF: 1 });
+            data.GS = await mongoOps.fnFindOneAndUpdate(paymentSchema, { ND: { $lte: new Date() }, DEF: { $exists: 0 }, S: { $ne: 'Verified' } }, { DEF: 1 });
             logger.info('Running cron job...', data);
         });
         return null;
