@@ -489,15 +489,31 @@ const fnListContact = async (req, res) => {
 
         const page = parseInt(req.query.page) || 1;
         const limit = parseInt(req.query.limit) || 10;
+
+        const query = { BID, _loanId: new ObjectId(_loanId) }
+        //filter
+        const value = req.query.value || "";
+        const type = req.query.type || "";
+
+        if (value && type) {
+            if (type === 'CE') {
+                query.CE = { $regex: value, $options: 'i' };// Case-insensitive search
+            } else if (type === 'PN') {
+                query.PN = { $regex: value, $options: 'i' };// Case-insensitive search
+            } else if (type === 'CN') {
+                query.CN = { $regex: value, $options: 'i' };// Case-insensitive search
+            }
+        }
+
         const pipeline = [
-            { $match: { BID, _loanId: new ObjectId(_loanId) } },
+            { $match: query },
             {
                 $facet: {
                     metadata: [{ $count: "total" }],
                     data: [
                         { $skip: (page - 1) * limit },
                         { $limit: limit },
-                        { $project: { PN: 1, CE: 1, D: 1 } }
+                        { $project: { PN: 1, CE: 1, D: 1, CT: 1 } }
                     ]
                 }
             }
@@ -535,6 +551,7 @@ const fnDeleteContact = async (req, res) => {
         const _id = req.query._id || null;
         const BID = parseInt(req.currentUserData.BID) || 0;
         if (!ObjectId.isValid(_id) || !BID) return httpResponse.fnPreConditionFailed(res);
+        await mongoOps.fnDeleteOne(contactsSchema, { BID, _id: new ObjectId(_id) });
         return httpResponse.fnSuccess(res);
     } catch (error) {
         logger.warn('fnDeleteContact', error);
@@ -679,6 +696,18 @@ const fnListTeam = async (req, res) => {
         const query = { BID }
         const page = parseInt(req.query.page) || 1;
         const limit = parseInt(req.query.limit) || 10;
+
+        //filter
+        const value = req.query.value || "";
+        const type = req.query.type || "";
+
+        if (value && type) {
+            if (type === 'L') {
+                query.L = { $regex: value, $options: 'i' };// Case-insensitive search
+            } else if (type === 'N') {
+                query.N = { $regex: value, $options: 'i' };// Case-insensitive search
+            }
+        }
         const pipeline = [
             { $match: query },
             {
@@ -953,8 +982,24 @@ const fnListDocsDetail = async (req, res) => {
 
         const page = parseInt(req.query.page) || 1;
         const limit = parseInt(req.query.limit) || 10;
+
+        const query = { BID, _loanId: new ObjectId(_loanId) }
+        //filter
+        const value = req.query.value || "";
+        const type = req.query.type || "";
+
+        if (value && type) {
+            if (type === 'N') {
+                query.N = { $regex: value, $options: 'i' };// Case-insensitive search
+            } else if (type === 'C') {
+                query.C = { $regex: value, $options: 'i' };// Case-insensitive search
+            } else if (type === 'S') {
+                query.S = { $regex: value, $options: 'i' };// Case-insensitive search
+            }
+        }
+
         const pipeline = [
-            { $match: { BID, _loanId: new ObjectId(_loanId) } },
+            { $match: query },
             {
                 $facet: {
                     metadata: [{ $count: "total" }],

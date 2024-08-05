@@ -33,7 +33,8 @@ router.get('/listLoan', validate.fnAuthenticateToken, allinOneController.fnListL
 router.get('/getLoan', validate.fnAuthenticateToken, allinOneController.fnGetLoan);
 
 //Teams
-router.post('/updateTeam', [validate.fnDecryptBody, validate.fnAuthenticateToken, validate.teamAddVaildate, validate.vaildator], allinOneController.fnUpdateTeam);
+router.post('/addTeam', [validate.fnDecryptBody, validate.fnAuthenticateToken, validate.teamAddVaildate, validate.vaildator], allinOneController.fnUpdateTeam);
+router.post('/editTeam', [validate.fnDecryptBody, validate.fnAuthenticateToken, validate.teamEditVaildate, validate.vaildator], allinOneController.fnUpdateTeam);
 router.get('/getTeam', validate.fnAuthenticateToken, allinOneController.fnGetTeam);
 router.get('/listTeam', validate.fnAuthenticateToken, allinOneController.fnListTeam);
 router.post('/selectTeam', validate.fnDecryptBody, validate.fnAuthenticateToken, allinOneController.fnSelectTeam);

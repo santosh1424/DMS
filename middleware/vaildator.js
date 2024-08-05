@@ -169,6 +169,9 @@ const teamAddVaildate = [
     check("CP", "CP is Required").not().isEmpty(),
     // check("_loanId", "loanId is Required").not().isEmpty().trim(),
 ];
+const teamEditVaildate = [
+    check("_id", "Id is Required").not().isEmpty().trim(),
+];
 const roleVaildate = [
     check("N", "Name is Required").not().isEmpty().trim(),
     check("P", "Permission is Required").not().isEmpty().trim()
@@ -240,6 +243,7 @@ module.exports = {
     teamAddVaildate,
     fnMaintenancesCheck,
     // fnCheckPermission
+    teamEditVaildate,
     fnGetPermission,
     fnTD,
     fnFileData,
