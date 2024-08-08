@@ -52,6 +52,16 @@ const fnSave = async (collectionName, documents) => {
     return await newDocument.save();
 };
 
+const fnUpdateMany = async (collectionName, query, update) => {
+    return await collectionName.updateMany(query, update);
+};
+
+// Fetch and update documents, then save the updated documents to the data object
+const fnUpdateAndFetch = async (schema, query, update) => {
+    await mongoOps.fnUpdateMany(schema, query, update);
+    return mongoOps.fnFind(schema, { ...query, DEF: 1 });
+};
+
 module.exports = {
     fnFind,
     fnFindOne,
@@ -63,5 +73,7 @@ module.exports = {
     fnInsertOne,
     fnInsertMany,
     fnSave,
-    fnFindById
+    fnFindById,
+    fnUpdateMany,
+    // fnUpdateAndFetch
 }
