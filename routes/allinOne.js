@@ -79,7 +79,8 @@ router.get('/assignlistDefault', validate.fnAuthenticateToken, allinOneControlle
 router.get('/assignlistCriticalCases', validate.fnAuthenticateToken, allinOneController.fnAssignListCriticalCase);
 
 //Master Listing
-router.get('/mst/listDocsDetail', validate.fnAuthenticateToken, allinOneController.fnMSTListDocsDetail);
+router.get('/mst/listDocsDetail', validate.fnAuthenticateToken, allinOneController.fnMSTListDocsDetail);//all docs in BID
+router.get('/mst/assignlistDocsDetail', validate.fnAuthenticateToken, allinOneController.fnMSTAssignListDocsDetail);//Seleted user assign document in BID
 router.get('/mst/listDefault', validate.fnAuthenticateToken, allinOneController.fnMSTListDefault);
 router.get('/mst/listCriticalCases', validate.fnAuthenticateToken, allinOneController.fnMSTListCriticalCase);
 router.get('/sendMail', allinOneController.fnTest);

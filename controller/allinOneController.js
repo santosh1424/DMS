@@ -614,7 +614,6 @@ const fnSuggestion = async (req, res) => {
         else if (type == 'TL') data = await mongoOps.fnFind(userSchema, { BID, RM }, { N: 1, E: 1, _id: 0 }) //Team Lead Assingment 
         else if (type == 'AU') data = await mongoOps.fnFind(userSchema, { BID }, { N: 1, E: 1, _id: 0 }) //ALL User
         // logger.debug('suggtion', type, data, { BID, Z })
-        logger.debug('fnSuggestion', BID, data)
         data = await aes.fnEncryptAES(data);
         return httpResponse.fnSuccess(res, data);
     } catch (error) {
@@ -1159,6 +1158,7 @@ const fnDeleteDocs = async (req, res) => {
         return res.status(400).send('Bad Request');
     }
 };
+
 //Update Payment Details
 const fnUpdatePaymentDetails = async (req, res) => {
     try {
@@ -1495,7 +1495,9 @@ const fnAssignListDefault = async (req, res) => {
                     DC: "$docsDetails.C",
                     SD: "$docsDetails.SD",
                     ED: "$docsDetails.ED",
-                    DS: "$docsDetails.S"
+                    DS: "$docsDetails.S",
+                    FD: "$docsDetails.FD",
+                    _fileId: "$docsDetails._id",
                 }
             },
 
@@ -1634,6 +1636,8 @@ const fnAssignListCriticalCase = async (req, res) => {
                     ED: "$docsDetails.ED",
                     DS: "$docsDetails.S",
                     DP: "$docsDetails.P",
+                    FD: "$docsDetails.FD",
+                    _fileId: "$docsDetails._id",
 
                 }
             },
@@ -1662,7 +1666,6 @@ const fnAssignListCriticalCase = async (req, res) => {
 
 const fnMSTListDocsDetail = async (req, res) => {
     try {
-        const email = req.currentUserData.E;
         const BID = req.currentUserData.BID;
         const sessionName = req.query.SN;
         const page = parseInt(req.query.page) || 1;
@@ -1828,7 +1831,9 @@ const fnMSTListDefault = async (req, res) => {
                     DC: "$docsDetails.C",
                     SD: "$docsDetails.SD",
                     ED: "$docsDetails.ED",
-                    DS: "$docsDetails.S"
+                    DS: "$docsDetails.S",
+                    FD: "$docsDetails.FD",
+                    _fileId: "$docsDetails._id",
                 }
             },
 
@@ -1923,6 +1928,8 @@ const fnMSTListCriticalCase = async (req, res) => {
                     ED: "$docsDetails.ED",
                     DS: "$docsDetails.S",
                     DP: "$docsDetails.P",
+                    FD: "$docsDetails.FD",
+                    _fileId: "$docsDetails._id",
 
                 }
             },
@@ -1945,6 +1952,152 @@ const fnMSTListCriticalCase = async (req, res) => {
         return httpResponse.fnSuccess(res, data);
     } catch (error) {
         logger.warn('fnMSTListCriticalCase', error);
+        return httpResponse.fnBadRequest(res);
+    }
+}
+
+const fnMSTAssignListDocsDetail = async (req, res) => {
+    try {
+        const BID = req.currentUserData.BID;
+        const email = req.query.E;
+        const sessionName = req.query.SN;
+        const page = parseInt(req.query.page) || 1;
+        const limit = parseInt(req.query.limit) || 10;
+        let selectedDocsSchemaName;
+        const specificConditions = [];
+
+        switch (sessionName) {
+            case 'TD':
+                selectedDocsSchemaName = "transaction_models";
+                specificConditions.push(
+                    { $in: [email, { $ifNull: ["$TD.M", []] }] },
+                    { $in: [email, { $ifNull: ["$TD.C", []] }] }
+                );
+                break;
+            case 'CD':
+                selectedDocsSchemaName = "compliance_models";
+                specificConditions.push(
+                    { $in: [email, { $ifNull: ["$CD.M", []] }] },
+                    { $in: [email, { $ifNull: ["$CD.C", []] }] }
+                );
+                break;
+            case 'C':
+                selectedDocsSchemaName = "covenants_models";
+                specificConditions.push(
+                    { $in: [email, { $ifNull: ["$C.M", []] }] },
+                    { $in: [email, { $ifNull: ["$C.C", []] }] }
+                );
+                break;
+            case 'CP':
+                selectedDocsSchemaName = "precedent_models";
+                specificConditions.push(
+                    { $in: [email, { $ifNull: ["$CP.M", []] }] },
+                    { $in: [email, { $ifNull: ["$CP.C", []] }] }
+                );
+                break;
+            case 'CS':
+                selectedDocsSchemaName = "subsequent_models";
+                specificConditions.push(
+                    { $in: [email, { $ifNull: ["$CS.M", []] }] },
+                    { $in: [email, { $ifNull: ["$CS.C", []] }] }
+                );
+                break;
+            case 'PD':
+                selectedDocsSchemaName = "payment_models";
+                specificConditions.push(
+                    { $in: [email, { $ifNull: ["$PD.M", []] }] },
+                    { $in: [email, { $ifNull: ["$PD.C", []] }] }
+                );
+                break;
+            default:
+                return httpResponse.fnConflict(res);
+        }
+
+
+        const query = [
+            {
+                $match: {
+                    $expr: {
+                        $and: [
+                            { $or: [{ $eq: ["$L", email] }, ...specificConditions] },
+                            { $eq: ["$BID", BID] }
+                        ]
+                    }
+                }
+            },
+            {
+                $lookup: {
+                    from: "loan_models",
+                    localField: "_id",
+                    foreignField: "_teamId",
+                    as: "loanDetails"
+                }
+            },
+            {
+                $unwind: "$loanDetails", // Unwind the loanDetails array
+            },
+            {
+                $lookup: {
+                    from: selectedDocsSchemaName,
+                    localField: "loanDetails._id",
+                    foreignField: "_loanId",
+                    as: "docsDetails"
+                }
+            },
+            {
+                $unwind: "$docsDetails"
+            },
+            {
+                $project: {
+                    _id: 1,
+                    L: 1,
+                    N: 1,
+                    _loanId: "$loanDetails._id",
+                    AID: "$loanDetails.AID",
+                    CN: "$loanDetails.CN",
+                    SD: "$loanDetails.SD",
+                    S: "$docsDetails.S"
+                }
+            },
+            {
+                $group:
+
+                {
+                    _id: "$_loanId",
+                    AID: {
+                        $first: "$AID"
+                    },
+                    CN: {
+                        $first: "$CN"
+                    },
+                    SD: {
+                        $first: "$SD"
+                    },
+                    details: {
+                        $push: {
+                            S: "$S"
+                        }
+                    }
+                }
+            },
+            {
+                $facet: {
+                    metadata: [{ $count: "total" }],
+                    data: [
+                        { $skip: (page - 1) * limit },
+                        { $limit: limit },
+                        { $project: { _v: 0 } }
+                    ]
+                }
+            }
+        ];
+        logger.debug('{MST}Query', helper.fnStringlyJSON(query));
+        let output = await mongoOps.fnAggregate(teamSchema, query);
+        const data = await aes.fnEncryptAES(output);
+        return httpResponse.fnSuccess(res, data);
+        // return output;
+    } catch (error) {
+        logger.warn('fnMSTAssignListDocsDetail', error);
         return httpResponse.fnBadRequest(res);
     }
 }
@@ -1984,6 +2137,8 @@ module.exports = {
     fnListDocsDetail,
     fnAssignListDefault,
     fnAssignListCriticalCase,
+    fnMSTAssignListDocsDetail,
+    fnMSTListDocsDetail,
     // fnUpdateTD,
     fnViewDocs,
     fnDownloadDocs,
