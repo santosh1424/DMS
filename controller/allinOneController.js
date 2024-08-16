@@ -747,7 +747,7 @@ const fnUpdateMST = async (req, res) => {
             if (!userPremission) return httpResponse.fnForbidden(res);
             await mongoOps.fnInsertOne(mstSchema, { BID, N: req.body.N, V: req.body.V });
         }
-        logger.debug('Updating MST....', _id, req.body)
+        logger.debug('Updating MST.... _id', _id, req.body)
         return httpResponse.fnSuccess(res);
     } catch (error) {
         logger.warn('fnUpdateMST', error)
@@ -1133,6 +1133,28 @@ const fnDeleteDocs = async (req, res) => {
                 else if (sessionName == 'C') { selectedDocsSchema = covenantsSchema; }
                 else if (sessionName == 'CS') { selectedDocsSchema = subsequentSchema; }
                 else if (sessionName == 'CP') { selectedDocsSchema = precedentSchema; }
+                else if (sessionName == 'PD') {
+                    const index = req.query.POS || 0;
+                    if (!index) return httpResponse.fnPreConditionFailed(res);
+                    // Create the update object dynamically
+                    const updateBody = {
+                        $set: {},
+                        $unset: {}
+                    };
+                    const query = { BID, _id: new ObjectId(_id) };
+                    updateBody.$set[`GS.${index}.S`] = 'Pending';  // Set status S to "Pending"
+                    updateBody.$unset[`GS.${index}.FD`] = 1;      // Unset FD
+                    // Perform the update using fnFindOneAndUpdate
+                    await mongoOps.fnFindOneAndUpdate(paymentSchema, query, updateBody);
+                    await fs.unlink(filepath, (err) => {
+                        if (err) {
+                            logger.warn(`Error deleting ${filepath}:`, err);
+                        } else {
+                            logger.debug(`Payment Successfully Deleted...... ${filepath}`, _id);
+                        }
+                    });
+                    return httpResponse.fnSuccess(res);
+                }
 
                 const query = { BID, _id: new ObjectId(_id), 'FD.filename': filename };
                 const body = { $set: { S: "Pending" }, $unset: { FD: 1 } }
