@@ -68,12 +68,3 @@ const _isEmailDeliverable = async (email) => {
     return domainValid;
 };
 
-
-fnSendEmail({
-    to: 'noxato3307@ikangou.com',
-    subject: 'Document Management for ERP for testing',
-    message: `<h1>Document Remainders  </h1>
-    <p>Dear 1User1,</p>
-    <p>Take action on our platfOrm .</p>
-    <p>Thank you!</p>`
-});
