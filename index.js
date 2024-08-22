@@ -82,7 +82,7 @@ const { fnConfigureSocketIO } = require('./config/socketConfig');
                     //socket fnMaintenancesCheck
                     io.use((res, next) => (parseInt(constants.UNDER_MAINTENANCE_MODE)) ? next(httpResponse.fnServiceUnavailable(res)) : next());
                     await fnConfigureSocketIO(io);//Socket Connection
-                    await mycrons.fnCheckEndDate();//cron
+                    await mycrons.fnDefaultCheck();//cron
                     // await mycrons.fnSendNotification();//cron
                     logger.info('Server is Up and Running', http.address());
                 } catch (error) {
