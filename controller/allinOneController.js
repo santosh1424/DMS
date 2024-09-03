@@ -39,11 +39,11 @@ const { fnAllInStorage } = require('../config/file_config');
 const { fnSendEmail } = require('../config/mailer_config');
 const _uploadMiddleware = multer({ storage: fnAllInStorage }).array('file');
 
-const fnTestApp = (req, res) => {
+const fnTestApp = async (req, res) => {
     try {
-        const message = _fnGetTeam(email);//'This is MessagE'
-        // _fnGetTeam(email);
-        logger.info(`fnTestApp ${message}`)
+        const message = 'this is message';
+        logger.info(`fnTestApp ${message}`);
+
         return res.status(200).json({ message });
     } catch (err) {
         return logger.warn('fnTestApp', err)
@@ -903,13 +903,14 @@ const fnAddDocsDetails = async (req, res) => {
     try {
         const BID = parseInt(req.currentUserData.BID) || 0;
         const _loanId = req.body._loanId || null
-        if (!ObjectId.isValid(_loanId) || !req.body.SN) return httpResponse.fnPreConditionFailed(res);
+        const sessionName = req.body.SN || '';
+        if (!ObjectId.isValid(_loanId) || !sessionName) return httpResponse.fnPreConditionFailed(res);
         // Add Documents Details 
         req.body.BID = parseInt(req.currentUserData.BID) || 0;//UUID
 
-        // const [selectedDocsSchema, userPremission] = await _fnSelectSchema(req.body.SN, 'add');
+        // const [selectedDocsSchema, userPremission] = await _fnSelectSchema(sessionName, 'add');
         let selectedDocsSchema, userPremission;
-        switch (req.body.SN) {
+        switch (sessionName) {
             case 'TD': userPremission = await _fnVaildatingPermission(req.currentUserData._userId, 'transaction', 'add', 1); selectedDocsSchema = transactionSchema; break;
             case 'CD': userPremission = await _fnVaildatingPermission(req.currentUserData._userId, 'compliance', 'add', 1); selectedDocsSchema = complianceSchema; break;
             case 'C': userPremission = await _fnVaildatingPermission(req.currentUserData._userId, 'covenants', 'add', 1); selectedDocsSchema = covenantsSchema; break;
@@ -919,10 +920,12 @@ const fnAddDocsDetails = async (req, res) => {
         }
         if (!userPremission) return httpResponse.fnForbidden(res);
         delete req.body.SN;
-        logger.debug('Add Docs Details...', selectedDocsSchema, req.body)
-        let data = await mongoOps.fnInsertOne(selectedDocsSchema, { BID, _loanId: new ObjectId(_loanId), ...req.body })
-        data = await aes.fnEncryptAES(data);
-        return httpResponse.fnSuccess(res, data);
+        logger.debug('Add Docs Details...', selectedDocsSchema, req.body);
+        const output = await mongoOps.fnInsertOne(selectedDocsSchema, { BID, _loanId: new ObjectId(_loanId), ...req.body });
+        //Notify Maker
+        const data = await mongoOps.fnFindById(loanSchema, _loanId);
+        await _fnNotify(output._id, data._teamId, sessionName, 'M');
+        return httpResponse.fnSuccess(res);
     } catch (error) {
         logger.warn('fnAddDocsDetails', error)
         if (error.code === 11000) return httpResponse.fnUnprocessableContent(res);//MongoDB DuplicateKey error
@@ -935,9 +938,11 @@ const fnEditDocsDetails = async (req, res) => {
     try {
         const BID = parseInt(req.currentUserData.BID) || 0;
         const _id = req.body._id || null;
-        if (!ObjectId.isValid(_id) || !req.body.SN || !BID) return httpResponse.fnPreConditionFailed(res);
+        const sessionName = req.body.SN || '';
+        const _loanId = req.body._loanId || '';
+        if (!ObjectId.isValid(_id) || !sessionName || !BID) return httpResponse.fnPreConditionFailed(res);
         let selectedDocsSchema, userPremission;
-        switch (req.body.SN) {
+        switch (sessionName) {
             case 'TD': userPremission = await _fnVaildatingPermission(req.currentUserData._userId, 'transaction', 'edit', 1); selectedDocsSchema = transactionSchema; break;
             case 'CD': userPremission = await _fnVaildatingPermission(req.currentUserData._userId, 'compliance', 'edit', 1); selectedDocsSchema = complianceSchema; break;
             case 'C': userPremission = await _fnVaildatingPermission(req.currentUserData._userId, 'covenants', 'edit', 1); selectedDocsSchema = covenantsSchema; break;
@@ -949,7 +954,13 @@ const fnEditDocsDetails = async (req, res) => {
         delete req.body.SN;
         delete req.body._loanId;
         const mongoUpdate = { $set: { ...req.body } };
-        if (req.body.S == 'Verified') { mongoUpdate.$unset = { DEF: 1 } }
+        if (req.body.S == 'Verified') {
+            mongoUpdate.$unset = { DEF: 1 };
+
+            const data = await mongoOps.fnFindById(loanSchema, _loanId);
+            await _fnNotify(_id, data._teamId, 'L');
+            // _fnNotify = async (documentId = null, _teamId = null, sessionName = null, teamRole = null) 
+        }
         const result = await mongoOps.fnFindOneAndUpdate(selectedDocsSchema, { BID, _id: new ObjectId(_id) }, mongoUpdate);
         logger.debug('EDIT Docs Details...', selectedDocsSchema, result)
         return httpResponse.fnSuccess(res);
@@ -1048,9 +1059,11 @@ const fnUploadDocs = async (req, res) => {
                 return httpResponse.fnSuccess(res);
             }
             body.FD = req.files;
-            await mongoOps.fnFindOneAndUpdate(selectedDocsSchema, query, body);
+            const output = await mongoOps.fnFindOneAndUpdate(selectedDocsSchema, query, body);
             logger.debug('Uploading file ......', LOC, _id, req.files)
-
+            //Notify Checker
+            const data = await mongoOps.fnFindById(loanSchema, output._loanId);
+            await _fnNotify(output._id, data._teamId, sessionName, 'C');
             return httpResponse.fnSuccess(res);
         } catch (error) {
             logger.warn('fnUploadDocs ', error);
@@ -1380,29 +1393,6 @@ const fnAssignListDocsDetail = async (req, res) => {
         // return output;
     } catch (error) {
         logger.warn('fnAssignListDocsDetail', error);
-        return httpResponse.fnBadRequest(res);
-    }
-}
-
-const fnTest = async (req, res) => {
-    try {
-        // const _id = '667934adb254c17c7742e543';
-        // const sessionName = 'TD';
-        // let selectedDocsSchema;
-        // let data = await mongoOps.fnFindOne(teamSchema, { _id: new ObjectId(_id) });
-        // if (sessionName == 'TD') _fnSendNotification("Transaction Document", "Add", 'santoshdubey.codium@gmail.com');
-        // logger.debug(data, data.TD.M);//Maker data.TD.M
-        fnSendEmail({
-            to: 'santoshdubey.codium@gmail.com',
-            subject: 'Document Management for ERP for testing',
-            message: `<h1>Document Remainders  </h1>
-            <p>Dear 1User1,</p>
-            <p>Take action on our platfOrm .</p>
-            <p>Thank you!</p>`
-        });
-        return httpResponse.fnSuccess(res);
-    } catch (error) {
-        logger.warn('fnTest', error)
         return httpResponse.fnBadRequest(res);
     }
 }
@@ -2161,7 +2151,6 @@ module.exports = {
     fnAssignListCriticalCase,
     fnMSTAssignListDocsDetail,
     fnMSTListDocsDetail,
-    // fnUpdateTD,
     fnViewDocs,
     fnDownloadDocs,
     fnDeleteDocs,
@@ -2172,7 +2161,6 @@ module.exports = {
     fnListMST,
     fnAssignListDocsDetail,
     fnListPaymentDetails,
-    fnTest,
     fnMSTListDocsDetail,
     fnMSTListDefault,
     fnMSTListCriticalCase
@@ -2267,16 +2255,100 @@ const _fnGetModulePermission = async (_userId = null, moduleName = null, action 
     // return false;
 }
 
-const _fnSendNotification = async (schema, status, email) => {
-    return await _sendEmail({
-        to: email,
-        subject: 'Document Management for ERP',
-        message: `< h1 > Document Management </h1 >
-        <p>Dear User,</p>
-        <p>Your ${schema} : <strong>${status}</strong></p>
-        <p>Take action on our platform.</p>
-        <p>Thank you!</p>`,
-    });
+const _fnSendEmails = async (recipients = [], emailContent = { subject: 'Blank', message: 'Empty Body' }) => {
+    const failedEmails = []; // Array to store emails that failed to send
+
+    await Promise.all(
+        recipients.map(async (email) => {
+            try {
+                await fnSendEmail({
+                    to: email,
+                    ...emailContent
+                });
+                logger.debug(`Email sent to ${email}`);
+            } catch (error) {
+                logger.warn(`Failed to send email to ${email}:`, error);
+                failedEmails.push(email); // Add the failed email to the array
+            }
+        })
+    );
+
+    if (failedEmails.length > 0) {
+        logger.debug('Failed to send emails to the following addresses:');
+        logger.debug(failedEmails);
+    } else {
+        logger.debug('All emails were sent successfully.');
+    }
+    return null;
+};
+
+const _fnNotify = async (documentId = null, _teamId = null, sessionName = null, teamRole = null) => {
+    try {
+        if (!documentId || !_teamId) return null;
+        logger.debug('_fnNotify', documentId, _teamId)
+        const data = await mongoOps.fnFindById(teamSchema, _teamId)
+
+        const teamName = data.N || 'tempTeam';
+        const teamLead = data.L || 'tempLead';
+        const leadEmailContent = {
+            subject: 'Document Successfully Verified',
+            message: `
+            <h1>Document Successfully Verified</h1>
+            <p>Dear ${teamLead} ,</p>
+            <p>We are pleased to inform you that the document with name<strong>${documentId}</strong> has been successfully verified.</p>
+            <p>Our verification  ${teamName} team has thoroughly reviewed the document, and the process is now complete.</p>
+            <p>If you have any questions or need further information, please feel free to reach out.</p>
+            <p>Thank you for your cooperation.</p>
+            <p>Best regards,</p>
+            <p>The Verification Team</p>`,
+        };
+        const makerEmailContent = {
+            subject: 'File Created: Upload Pending',
+            message: `
+                <h1>File Created: Upload Pending</h1>
+                <p>Dear Maker,</p>
+                <p>We would like to inform you that the file successfully created.</p>
+                <p>However, please note that the upload process for the document with the ID <strong>${documentId}</strong> is still pending. Our ${teamName} team is working to complete the upload as soon as possible.</p>
+                <p>You will be notified once the upload is complete and the file is available for access.</p>
+                <p>If you have any questions or need further assistance, please feel free to reach out.</p>
+                <p>Thank you for your understanding.</p>
+                <p>Best regards,</p>
+                <p>The File Management Team</p>`,
+        };
+        const checkerEmailContent = {
+            subject: 'Action Required: Document Verification Needed',
+            message: `
+                <h1>Action Required: Document Verification Needed</h1>
+                <p>Dear Checker,</p>
+                <p>This is a reminder that the document with the ID <strong>${documentId}</strong> is pending verification by our ${teamName} team.</p>
+                <p>Please review and verify the document </p>
+                <p>Your prompt attention to this matter is greatly appreciated.</p>
+                <p>If you have any questions or require further assistance, please do not hesitate to contact us.</p>
+                <p>Thank you for your cooperation.</p>
+                <p>Best regards,</p>
+                <p>The Verification Team</p>`,
+        };
+
+        if (sessionName == 'L') {
+            logger.debug('teamLead teamName, documentId', teamLead, teamName, documentId)
+            await _fnSendEmails([data.L], leadEmailContent);
+        }
+        else if (sessionName == 'TD' && data.TD) {
+            if (teamRole == 'M') {
+                logger.debug('Maker', data.TD.M)
+                await _fnSendEmails(data.TD.M, makerEmailContent);
+            } else if (teamRole == 'C') {
+                logger.debug('Checker', data.TD.C)
+                await _fnSendEmails(data.TD.C, checkerEmailContent);
+            }
+        }
+
+    } catch (error) {
+        logger.warn(' _fnNotify error', error)
+
+    }
+    return null;
+
 }
 
 
