@@ -925,7 +925,7 @@ const fnAddDocsDetails = async (req, res) => {
         //Notify Maker
         const data = await mongoOps.fnFindById(loanSchema, _loanId);
         await _fnNotify(output._id, data._teamId, sessionName, 'M');
-        return httpResponse.fnSuccess(res);
+        return httpResponse.fnSuccess(res, await aes.fnEncryptAES(output._id));
     } catch (error) {
         logger.warn('fnAddDocsDetails', error)
         if (error.code === 11000) return httpResponse.fnUnprocessableContent(res);//MongoDB DuplicateKey error
@@ -2340,6 +2340,42 @@ const _fnNotify = async (documentId = null, _teamId = null, sessionName = null, 
             } else if (teamRole == 'C') {
                 logger.debug('Checker', data.TD.C)
                 await _fnSendEmails(data.TD.C, checkerEmailContent);
+            }
+        }
+        else if (sessionName == 'CD' && data.CD) {
+            if (teamRole == 'M') {
+                logger.debug('Maker', data.CD.M)
+                await _fnSendEmails(data.CD.M, makerEmailContent);
+            } else if (teamRole == 'C') {
+                logger.debug('Checker', data.CD.C)
+                await _fnSendEmails(data.CD.C, checkerEmailContent);
+            }
+        }
+        else if (sessionName == 'C' && data.C) {
+            if (teamRole == 'M') {
+                logger.debug('Maker', data.C.M)
+                await _fnSendEmails(data.C.M, makerEmailContent);
+            } else if (teamRole == 'C') {
+                logger.debug('Checker', data.C.C)
+                await _fnSendEmails(data.C.C, checkerEmailContent);
+            }
+        }
+        else if (sessionName == 'CS' && data.CS) {
+            if (teamRole == 'M') {
+                logger.debug('Maker', data.CS.M)
+                await _fnSendEmails(data.CS.M, makerEmailContent);
+            } else if (teamRole == 'C') {
+                logger.debug('Checker', data.CS.C)
+                await _fnSendEmails(data.CS.C, checkerEmailContent);
+            }
+        }
+        else if (sessionName == 'CP' && data.CP) {
+            if (teamRole == 'M') {
+                logger.debug('Maker', data.CP.M)
+                await _fnSendEmails(data.CP.M, makerEmailContent);
+            } else if (teamRole == 'C') {
+                logger.debug('Checker', data.CP.C)
+                await _fnSendEmails(data.CP.C, checkerEmailContent);
             }
         }
 
