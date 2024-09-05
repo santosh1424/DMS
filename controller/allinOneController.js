@@ -956,10 +956,8 @@ const fnEditDocsDetails = async (req, res) => {
         const mongoUpdate = { $set: { ...req.body } };
         if (req.body.S == 'Verified') {
             mongoUpdate.$unset = { DEF: 1 };
-
             const data = await mongoOps.fnFindById(loanSchema, _loanId);
-            await _fnNotify(_id, data._teamId, 'L');
-            // _fnNotify = async (documentId = null, _teamId = null, sessionName = null, teamRole = null) 
+            await _fnNotify(_id, data._teamId, '', 'L');
         }
         const result = await mongoOps.fnFindOneAndUpdate(selectedDocsSchema, { BID, _id: new ObjectId(_id) }, mongoUpdate);
         logger.debug('EDIT Docs Details...', selectedDocsSchema, result)
@@ -1211,14 +1209,20 @@ const fnUpdatePaymentDetails = async (req, res) => {
             req.body.BID = parseInt(req.currentUserData.BID) || 0;//UUID
             let data = await mongoOps.fnInsertOne(paymentSchema, { BID, _loanId: new ObjectId(_loanId), ...req.body })
             logger.debug('Added Payment  Details...', data)
+            const loan = await mongoOps.fnFindById(loanSchema, _loanId);
+            await _fnNotify(data._id, loan._teamId, 'PD', 'M');
             return httpResponse.fnSuccess(res);
         }
+        //Notify Checker
+        const data = await mongoOps.fnFindById(loanSchema, _loanId);
+        await _fnNotify(_id, data._teamId, 'PD', 'M');
     } catch (error) {
         logger.warn('fnUpdatePaymentDetails', error)
         if (error.code === 11000) return httpResponse.fnUnprocessableContent(res);//MongoDB DuplicateKey error
         else return httpResponse.fnBadRequest(res);
 
     }
+    return null;
 };
 
 const fnListPaymentDetails = async (req, res) => {
@@ -2285,7 +2289,7 @@ const _fnSendEmails = async (recipients = [], emailContent = { subject: 'Blank',
 const _fnNotify = async (documentId = null, _teamId = null, sessionName = null, teamRole = null) => {
     try {
         if (!documentId || !_teamId) return null;
-        logger.debug('_fnNotify', documentId, _teamId)
+        logger.debug('_fnNotify', documentId, _teamId);
         const data = await mongoOps.fnFindById(teamSchema, _teamId)
 
         const teamName = data.N || 'tempTeam';
@@ -2329,7 +2333,7 @@ const _fnNotify = async (documentId = null, _teamId = null, sessionName = null, 
                 <p>The Verification Team</p>`,
         };
 
-        if (sessionName == 'L') {
+        if (!sessionName && teamRole == 'L') {
             logger.debug('teamLead teamName, documentId', teamLead, teamName, documentId)
             await _fnSendEmails([data.L], leadEmailContent);
         }
@@ -2376,6 +2380,15 @@ const _fnNotify = async (documentId = null, _teamId = null, sessionName = null, 
             } else if (teamRole == 'C') {
                 logger.debug('Checker', data.CP.C)
                 await _fnSendEmails(data.CP.C, checkerEmailContent);
+            }
+        }
+        else if (sessionName == 'PD' && data.PD) {
+            if (teamRole == 'M') {
+                logger.debug('Maker', data.PD.M)
+                await _fnSendEmails(data.PD.M, makerEmailContent);
+            } else if (teamRole == 'C') {
+                logger.debug('Checker', data.PD.C)
+                await _fnSendEmails(data.PD.C, checkerEmailContent);
             }
         }
 
