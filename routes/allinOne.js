@@ -10,16 +10,16 @@ const express = require('express'), router = express.Router();
 const allinOneController = require('../controller/allinOneController');
 const validate = require('../middleware/vaildator')
 
-router.get('/data', allinOneController.fnTestApp);
 router.post('/encrypt', allinOneController.fnEncryptTest);
 router.post('/decrypt', allinOneController.fnDecryptTest);
 //Admin Routes
 router.post('/addAdmin', [validate.fnDecryptBody, validate.adminAddVaildate, validate.vaildator], allinOneController.fnAddAdmin);
 router.post('/login', [validate.fnDecryptBody, validate.loginVaildate, validate.vaildator], allinOneController.fnLogin);
 //Dashboard
-router.get('/dashboard', validate.fnAuthenticateToken, ((req, res) => {
-    res.send("Dashboard");
-}));
+router.get('/dashboard', validate.fnAuthenticateToken, allinOneController.fnDashboard)
+//((req, res) => {
+//res.send("Dashboard");
+//}));
 //User Routes
 router.post('/addUser', [validate.fnDecryptBody, validate.userAddVaildate, validate.fnAuthenticateToken, validate.vaildator], allinOneController.fnAddUser);
 router.post('/editUser', validate.fnDecryptBody, validate.fnAuthenticateToken, allinOneController.fnEditUser);
@@ -37,6 +37,8 @@ router.post('/addTeam', [validate.fnDecryptBody, validate.fnAuthenticateToken, v
 router.post('/editTeam', [validate.fnDecryptBody, validate.fnAuthenticateToken, validate.teamEditVaildate, validate.vaildator], allinOneController.fnUpdateTeam);
 router.get('/getTeam', validate.fnAuthenticateToken, allinOneController.fnGetTeam);
 router.get('/listTeam', validate.fnAuthenticateToken, allinOneController.fnListTeam);
+router.get('/userTeams', validate.fnAuthenticateToken, allinOneController.fnGetUserTeams);
+router.post('/removeTeams', validate.fnDecryptBody, validate.fnAuthenticateToken, allinOneController.fnRemoveTeams);
 router.post('/selectTeam', validate.fnDecryptBody, validate.fnAuthenticateToken, allinOneController.fnSelectTeam);
 router.get('/suggestion', validate.fnAuthenticateToken, allinOneController.fnSuggestion);
 
@@ -83,7 +85,7 @@ router.get('/mst/listDocsDetail', validate.fnAuthenticateToken, allinOneControll
 router.get('/mst/assignlistDocsDetail', validate.fnAuthenticateToken, allinOneController.fnMSTAssignListDocsDetail);//Seleted user assign document in BID
 router.get('/mst/listDefault', validate.fnAuthenticateToken, allinOneController.fnMSTListDefault);
 router.get('/mst/listCriticalCases', validate.fnAuthenticateToken, allinOneController.fnMSTListCriticalCase);
-router.get('/sendMail', allinOneController.fnTest);
+router.get('/data', allinOneController.fnTestApp);
 
 
 module.exports = router

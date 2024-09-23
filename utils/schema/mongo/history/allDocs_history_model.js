@@ -1,0 +1,80 @@
+'use strict'
+/**
+ * transaction_model.js:Transaction Detail
+ * Developer:Santosh Dubey
+ * 
+ */
+const mongoose = require('mongoose');
+
+const allDocSchema = new mongoose.Schema({
+    BID: { type: Number, required: true },
+    DN: { type: String, required: true, trim: true },
+    SN: { type: String, required: true, trim: true },
+    AID: { type: String, required: true, trim: true },
+    // R: { type: String, trim: true, },
+    C: { type: String, required: true },
+    // P: { type: String, required: true },
+    // DEF: { type: Number },
+    // SD: { type: Date, required: true },
+    // ED: { type: Date, required: true },
+    // EL: { type: String, trim: true },
+    // PL: { type: String, trim: true },
+    _loanId: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'loan_model',
+        required: true
+    },
+    // FD: { type: Object, trim: true },
+    S: {
+        type: String,
+        required: true,
+        trim: true,
+        enum: ['Pending', 'In progress', 'Verified'],
+        default: 'Pending'
+    }
+},
+    {
+        timestamps: true
+    }
+);
+
+module.exports = mongoose.model('allDocs_history', allDocSchema);
+
+/**
+ * DN-Document Name
+ * SN-Session Name
+ * AID - Agreement ID
+ * C - Category
+ *    1-Common Loan Agreements / Facility Agreement/Loan Agreement 
+ *    2-Security Trustee Agreement
+ *    3-Lenders’ Agent Agreement
+ *    4-Escrow Agreement;
+ *    5-Substitution Agreement;
+ *    6-Subordination Agreement;
+ *    7-Supplementary Escrow Agreement;
+ *    8-Sponsor’s Undertakings;
+ *    9-Security documents
+ *    10-Pledge Agreement;
+ *    11-Consent to Assignment, if applicable
+ *    12-Trust and Retention Account Agreement
+ * 
+ * 
+ * T- Type
+ *  1- PDF
+ *  2- Excel 
+ *  3- PDF + Excel
+ *  4- Other
+ * 
+ * P- Priority
+ *  1- Low
+ *  2- Medium
+ *  3- High
+ * 
+ * SD-Start Date
+ * ED-End Date
+ * EL-Execution Location
+ * PL-Physical Location
+ * FD-file Date {N-name ,P-path,S-size}
+
+ * S-Stauts
+ */

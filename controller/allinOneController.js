@@ -24,6 +24,8 @@ const {
     mstSchema,
     managerSchema,
     paymentSchema
+    // ,
+    // allDocsSchema
 } = require('../utils/schema/mongo/index');
 const aes = require('../utils/aes');
 const redisKeys = require('../utils/schema/redis/redisKeys');
@@ -49,6 +51,41 @@ const fnTestApp = async (req, res) => {
         return logger.warn('fnTestApp', err)
     }
 
+}
+
+const fnDashboard = async (req, res) => {
+    try {
+        const BID = parseInt(req.currentUserData.BID) || 0;
+        if (!BID) return httpResponse.fnPreConditionFailed(res);
+
+        const pipeline = [
+            {
+                $match: {
+                    BID
+                }
+            },
+            {
+                $group: {
+                    _id: "$Z",
+                    totalLoans: {
+                        $sum: 1
+                    },
+                    totalSanction: {
+                        $sum: "$SA"
+                    },
+                    totalHold: {
+                        $sum: "$HA"
+                    }
+                }
+            }
+        ];
+        logger.debug('pipeline Dashboard', helper.fnStringlyJSON(pipeline))
+        const data = await mongoOps.fnAggregate(loanSchema, pipeline) || {};
+        return httpResponse.fnSuccess(res, await aes.fnEncryptAES(data));
+    } catch (error) {
+        logger.warn('fnGetUserTeams ', error);
+        return httpResponse.fnBadRequest(res);
+    }
 }
 
 //Encrypt
@@ -647,6 +684,7 @@ const fnUpdateTeam = async (req, res) => {
     try {
         const BID = parseInt(req.currentUserData.BID) || 0;//UUID
         const _id = req.body._id || null;
+        if (!req.body.TD.M || !req.body.TD.C || !req.body.CD.M || !req.body.CD.C || !req.body.C.M || !req.body.C.C || !req.body.CP.M || !req.body.CP.C || !req.body.CS.M || !req.body.CS.C || !req.body.PD.M || !req.body.PD.C) return httpResponse.fnPreConditionFailed(res);
         if (_id && !ObjectId.isValid(_id)) return httpResponse.fnPreConditionFailed(res);
         else if (_id) {
             const userPremission = await _fnVaildatingPermission(req.currentUserData._userId, 'team', 'edit');
@@ -665,6 +703,23 @@ const fnUpdateTeam = async (req, res) => {
         else return httpResponse.fnBadRequest(res);
     }
 };
+
+//Select Team for loan 
+const fnRemoveTeams = async (req, res) => {
+    try {
+        // const userPremission = await _fnVaildatingPermission(req.currentUserData._userId, 'team', 'select');
+        // if (!userPremission) return httpResponse.fnForbidden(res);
+        const BID = parseInt(req.currentUserData.BID) || 0;//UUID
+        const email = req.body.email || null;
+        const _teamId = req.body._teamId || null;
+        if (!ObjectId.isValid(_loanId) || !ObjectId.isValid(_teamId) || !BID) return httpResponse.fnPreConditionFailed(res);
+        await mongoOps.fnFindOneAndUpdate(loanSchema, { BID, _id: new ObjectId(_loanId) }, { _teamId });
+        return httpResponse.fnSuccess(res);
+    } catch (error) {
+        logger.warn('fnRemoveTeams', error);
+        return httpResponse.fnBadRequest(res);
+    }
+}
 
 //Select Team for loan 
 const fnSelectTeam = async (req, res) => {
@@ -725,6 +780,67 @@ const fnListTeam = async (req, res) => {
         return httpResponse.fnSuccess(res, await aes.fnEncryptAES(data));
     } catch (error) {
         logger.warn('fnListTeam', error);
+        return httpResponse.fnBadRequest(res);
+    }
+}
+
+//List Team  +  Current team 
+const fnGetUserTeams = async (req, res) => {
+    try {
+        // const userPremission = await _fnVaildatingPermission(req.currentUserData._userId, 'tranfer', 'access');
+        // if (!userPremission) return httpResponse.fnForbidden(res);
+        const BID = parseInt(req.currentUserData.BID) || 0;
+        if (!BID) return httpResponse.fnPreConditionFailed(res);
+
+        const query = { BID }
+        const page = parseInt(req.query.page) || 1;
+        const limit = parseInt(req.query.limit) || 10;
+
+        //filter
+        const email = req.query.value || "";
+
+        const pipeline = [
+            {
+                $match: {
+                    $expr: {
+                        $and: [
+                            {
+                                $or: [
+                                    { $eq: ["$L", email] },
+                                    { $in: [email, { $ifNull: ["$TD.C", []] }] },
+                                    { $in: [email, { $ifNull: ["$CD.M", []] }] },
+                                    { $in: [email, { $ifNull: ["$CD.C", []] }] },
+                                    { $in: [email, { $ifNull: ["$C.M", []] }] },
+                                    { $in: [email, { $ifNull: ["$C.C", []] }] },
+                                    { $in: [email, { $ifNull: ["$CP.M", []] }] },
+                                    { $in: [email, { $ifNull: ["$CP.C", []] }] },
+                                    { $in: [email, { $ifNull: ["$CS.M", []] }] },
+                                    { $in: [email, { $ifNull: ["$CS.C", []] }] },
+                                    { $in: [email, { $ifNull: ["$PD.M", []] }] },
+                                    { $in: [email, { $ifNull: ["$PD.C", []] }] },
+                                ]
+                            },
+                            { $eq: ["$BID", BID] }
+
+                        ]
+                    }
+                }
+            },
+            {
+                $facet: {
+                    metadata: [{ $count: "total" }],
+                    data: [
+                        { $skip: (page - 1) * limit },
+                        { $limit: limit },
+                        { $project: { N: 1, L: 1, S: 1, createdAt: 1 } }
+                    ]
+                }
+            }
+        ];
+        const data = await mongoOps.fnAggregate(teamSchema, pipeline) || {};
+        return httpResponse.fnSuccess(res, await aes.fnEncryptAES(data));
+    } catch (error) {
+        logger.warn('fnGetUserTeams ', error);
         return httpResponse.fnBadRequest(res);
     }
 }
@@ -901,13 +1017,11 @@ const fnListRating = async (req, res) => {
 //Adding Edit Delete Transaction,Compliance,Covenants,Covenants Subsequent,Covenants Precedent Documents & Payment Schedule
 const fnAddDocsDetails = async (req, res) => {
     try {
-        const BID = parseInt(req.currentUserData.BID) || 0;
-        const _loanId = req.body._loanId || null
+        const BID = req.body.BID = parseInt(req.currentUserData.BID) || 0;
+        const _loanId = req.body._loanId || null;
         const sessionName = req.body.SN || '';
         if (!ObjectId.isValid(_loanId) || !sessionName) return httpResponse.fnPreConditionFailed(res);
-        // Add Documents Details 
-        req.body.BID = parseInt(req.currentUserData.BID) || 0;//UUID
-
+        const _userId = req.currentUserData._userId || ''
         // const [selectedDocsSchema, userPremission] = await _fnSelectSchema(sessionName, 'add');
         let selectedDocsSchema, userPremission;
         switch (sessionName) {
@@ -924,7 +1038,7 @@ const fnAddDocsDetails = async (req, res) => {
         const output = await mongoOps.fnInsertOne(selectedDocsSchema, { BID, _loanId: new ObjectId(_loanId), ...req.body });
         //Notify Maker
         const data = await mongoOps.fnFindById(loanSchema, _loanId);
-        await _fnNotify(output._id, data._teamId, sessionName, 'M');
+        await _fnNotify(BID, _userId, output._id, data._teamId, sessionName, 'M');
         return httpResponse.fnSuccess(res, await aes.fnEncryptAES(output._id));
     } catch (error) {
         logger.warn('fnAddDocsDetails', error)
@@ -940,6 +1054,7 @@ const fnEditDocsDetails = async (req, res) => {
         const _id = req.body._id || null;
         const sessionName = req.body.SN || '';
         const _loanId = req.body._loanId || '';
+        const _userId = req.currentUserData._userId || '';
         if (!ObjectId.isValid(_id) || !sessionName || !BID) return httpResponse.fnPreConditionFailed(res);
         let selectedDocsSchema, userPremission;
         switch (sessionName) {
@@ -957,7 +1072,7 @@ const fnEditDocsDetails = async (req, res) => {
         if (req.body.S == 'Verified') {
             mongoUpdate.$unset = { DEF: 1 };
             const data = await mongoOps.fnFindById(loanSchema, _loanId);
-            await _fnNotify(_id, data._teamId, '', 'L');
+            await _fnNotify(BID, _userId, _id, data._teamId, sessionName, 'L');
         }
         const result = await mongoOps.fnFindOneAndUpdate(selectedDocsSchema, { BID, _id: new ObjectId(_id) }, mongoUpdate);
         logger.debug('EDIT Docs Details...', selectedDocsSchema, result)
@@ -1034,6 +1149,7 @@ const fnUploadDocs = async (req, res) => {
             const BID = parseInt(req.currentUserData.BID) || 0;
             const LOC = req.query.LOC || null;
             const _id = req.query._id || null;
+            const _userId = req.currentUserData._userId || '';
             if (!ObjectId.isValid(_id) || !LOC || !BID || req.files.length != 1) return httpResponse.fnPreConditionFailed(res);
             const sessionName = LOC.split("/").slice(-1)[0] || null;
 
@@ -1061,7 +1177,7 @@ const fnUploadDocs = async (req, res) => {
             logger.debug('Uploading file ......', LOC, _id, req.files)
             //Notify Checker
             const data = await mongoOps.fnFindById(loanSchema, output._loanId);
-            await _fnNotify(output._id, data._teamId, sessionName, 'C');
+            await _fnNotify(BID, _userId, output._id, data._teamId, sessionName, 'C');
             return httpResponse.fnSuccess(res);
         } catch (error) {
             logger.warn('fnUploadDocs ', error);
@@ -1196,13 +1312,19 @@ const fnDeleteDocs = async (req, res) => {
 const fnUpdatePaymentDetails = async (req, res) => {
     try {
         const BID = parseInt(req.currentUserData.BID) || 0;
+        const _userId = req.currentUserData._userId || '';
         const _loanId = req.body._loanId || null
         const _id = req.body._id || null
         if (!BID) return httpResponse.fnPreConditionFailed(res);
         if (_id && ObjectId.isValid(_id)) { // Edit Documents Details 
             req.body.BID = parseInt(req.currentUserData.BID) || 0;//UUID
             let data = await mongoOps.fnFindOneAndUpdate(paymentSchema, { BID, _id: new ObjectId(_id) }, { GS: req.body.GS })
-            logger.debug('Update Payment  Details GS', data)
+            logger.debug('Update Payment  Details GS', data);
+            //Notify Checker
+            if (req.body.GS && req.body.POS >= 0 && req.body.GS[req.body.POS].S == 'Verified') {
+                const loan = await mongoOps.fnFindById(loanSchema, data._loanId);
+                await _fnNotify(BID, _userId, _id, loan._teamId, 'PD', 'L');
+            }
             return httpResponse.fnSuccess(res);
         }
         else if (!_id && _loanId && ObjectId.isValid(_loanId)) {// Add Documents Details 
@@ -1210,12 +1332,10 @@ const fnUpdatePaymentDetails = async (req, res) => {
             let data = await mongoOps.fnInsertOne(paymentSchema, { BID, _loanId: new ObjectId(_loanId), ...req.body })
             logger.debug('Added Payment  Details...', data)
             const loan = await mongoOps.fnFindById(loanSchema, _loanId);
-            await _fnNotify(data._id, loan._teamId, 'PD', 'M');
+            await _fnNotify(BID, _userId, data._id, loan._teamId, 'PD', 'M');
             return httpResponse.fnSuccess(res);
         }
-        //Notify Checker
-        const data = await mongoOps.fnFindById(loanSchema, _loanId);
-        await _fnNotify(_id, data._teamId, 'PD', 'M');
+
     } catch (error) {
         logger.warn('fnUpdatePaymentDetails', error)
         if (error.code === 11000) return httpResponse.fnUnprocessableContent(res);//MongoDB DuplicateKey error
@@ -2143,6 +2263,7 @@ module.exports = {
     fnGetTeam,
     fnUpdateTeam,
     fnSelectTeam,
+    fnGetUserTeams,
     fnListTeam,
     fnAddRole,
     fnListRole,
@@ -2167,7 +2288,9 @@ module.exports = {
     fnListPaymentDetails,
     fnMSTListDocsDetail,
     fnMSTListDefault,
-    fnMSTListCriticalCase
+    fnMSTListCriticalCase,
+    fnRemoveTeams,
+    fnDashboard
 }
 
 const _sendEmail = async (options) => {
@@ -2286,11 +2409,13 @@ const _fnSendEmails = async (recipients = [], emailContent = { subject: 'Blank',
     return null;
 };
 
-const _fnNotify = async (documentId = null, _teamId = null, sessionName = null, teamRole = null) => {
+const _fnNotify = async (BID = 0, _actionUserId = '', documentId = null, _teamId = null, sessionName = null, teamRole = null) => {
     try {
-        if (!documentId || !_teamId) return null;
+        if (!documentId || !_teamId || !BID || !_actionUserId) return null;
         logger.debug('_fnNotify', documentId, _teamId);
-        const data = await mongoOps.fnFindById(teamSchema, _teamId)
+        const data = await mongoOps.fnFindById(teamSchema, _teamId);
+        let documentDetails;
+        //  = await mongoOps.fnFindById(teamSchema, documentId);
 
         const teamName = data.N || 'tempTeam';
         const teamLead = data.L || 'tempLead';
@@ -2333,11 +2458,12 @@ const _fnNotify = async (documentId = null, _teamId = null, sessionName = null, 
                 <p>The Verification Team</p>`,
         };
 
-        if (!sessionName && teamRole == 'L') {
+        if (teamRole == 'L') {
             logger.debug('teamLead teamName, documentId', teamLead, teamName, documentId)
             await _fnSendEmails([data.L], leadEmailContent);
         }
         else if (sessionName == 'TD' && data.TD) {
+            documentDetails = await mongoOps.fnFindById(transactionSchema, documentId);
             if (teamRole == 'M') {
                 logger.debug('Maker', data.TD.M)
                 await _fnSendEmails(data.TD.M, makerEmailContent);
@@ -2347,6 +2473,7 @@ const _fnNotify = async (documentId = null, _teamId = null, sessionName = null, 
             }
         }
         else if (sessionName == 'CD' && data.CD) {
+            documentDetails = await mongoOps.fnFindById(complianceSchema, documentId);
             if (teamRole == 'M') {
                 logger.debug('Maker', data.CD.M)
                 await _fnSendEmails(data.CD.M, makerEmailContent);
@@ -2356,6 +2483,7 @@ const _fnNotify = async (documentId = null, _teamId = null, sessionName = null, 
             }
         }
         else if (sessionName == 'C' && data.C) {
+            documentDetails = await mongoOps.fnFindById(covenantsSchema, documentId);
             if (teamRole == 'M') {
                 logger.debug('Maker', data.C.M)
                 await _fnSendEmails(data.C.M, makerEmailContent);
@@ -2365,6 +2493,7 @@ const _fnNotify = async (documentId = null, _teamId = null, sessionName = null, 
             }
         }
         else if (sessionName == 'CS' && data.CS) {
+            documentDetails = await mongoOps.fnFindById(subsequentSchema, documentId);
             if (teamRole == 'M') {
                 logger.debug('Maker', data.CS.M)
                 await _fnSendEmails(data.CS.M, makerEmailContent);
@@ -2374,6 +2503,7 @@ const _fnNotify = async (documentId = null, _teamId = null, sessionName = null, 
             }
         }
         else if (sessionName == 'CP' && data.CP) {
+            documentDetails = await mongoOps.fnFindById(precedentSchema, documentId);
             if (teamRole == 'M') {
                 logger.debug('Maker', data.CP.M)
                 await _fnSendEmails(data.CP.M, makerEmailContent);
@@ -2391,6 +2521,7 @@ const _fnNotify = async (documentId = null, _teamId = null, sessionName = null, 
                 await _fnSendEmails(data.PD.C, checkerEmailContent);
             }
         }
+        // const output = await mongoOps.fnInsertOne(allDocsSchema, { BID, _loanId: new ObjectId(_loanId), ...req.body });
 
     } catch (error) {
         logger.warn(' _fnNotify error', error)

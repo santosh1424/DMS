@@ -11,6 +11,7 @@ module.exports = {
     complianceSchema: require('./compliance_model'),
     covenantsSchema: require('./covenants_model'),
     subsequentSchema: require('./subsequent_model'),
+    allDocsSchema: require('./history/allDocs_history_model'),
     precedentSchema: require('./precedent_model'),
     paymentSchema: require('./payment_model'),
     mstSchema: require('./mst_model'),
