@@ -36,16 +36,16 @@ const { fnConfigureSocketIO } = require('./config/socketConfig');
         // Define CORS options
         const corsOptions = {
             origin:
-                "*"
-                // function (origin, callback) {
-                //     if (constants.ALLOWED_ORIGINS.indexOf(origin) !== -1 || !origin) {
-                //         // Allow requests with a matching origin or if origin is undefined (e.g., from server-side)
-                //         callback(null, true);
-                //     } else {
-                //         // Disallow requests with origins not in the allowedOrigins 
-                //         callback(new Error('Not allowed by CORS'));
-                //     }
-                // }
+                // "*"
+                function (origin, callback) {
+                    if (constants.ALLOWED_ORIGINS.indexOf(origin) !== -1 || !origin) {
+                        // Allow requests with a matching origin or if origin is undefined (e.g., from server-side)
+                        callback(null, true);
+                    } else {
+                        // Disallow requests with origins not in the allowedOrigins 
+                        callback(new Error('Not allowed by CORS'));
+                    }
+                }
         };
 
         app.use(cors(corsOptions));   // Use the CORS middleware with custom options

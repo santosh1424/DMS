@@ -40,6 +40,7 @@ const multer = require('multer');
 const { fnAllInStorage } = require('../config/file_config');
 const { fnSendEmail } = require('../config/mailer_config');
 const _uploadMiddleware = multer({ storage: fnAllInStorage }).array('file');
+const moment = require('moment');
 
 const fnTestApp = async (req, res) => {
     try {
@@ -57,33 +58,59 @@ const fnDashboard = async (req, res) => {
     try {
         const BID = parseInt(req.currentUserData.BID) || 0;
         if (!BID) return httpResponse.fnPreConditionFailed(res);
-
+        // Get the start and end of the current month using moment.js
+        const startDate = req.query.SD ? new Date(req.query.SD) : null;// || moment().startOf('month').toDate(); // First day of the current month
+        const endDate = req.query.ED ? new Date(req.query.ED) : null;//|| moment().endOf('month').toDate();     // Last day of the current month
+        const query = {
+            BID
+        }
+        if (startDate && endDate) {
+            query.SD = {
+                $gte: startDate,  // Start of the month
+                $lte: endDate     // End of the month
+            }
+        }
         const pipeline = [
             {
-                $match: {
-                    BID
-                }
+                $match: query
             },
             {
-                $group: {
-                    _id: "$Z",
-                    totalLoans: {
-                        $sum: 1
-                    },
-                    totalSanction: {
-                        $sum: "$SA"
-                    },
-                    totalHold: {
-                        $sum: "$HA"
-                    }
+                $facet: {
+                    totalLoans: [
+                        {
+                            $group: {
+                                _id: "$BID",
+                                totalLoans: { $sum: 1 },
+                                totalSanction: { $sum: "$SA" },
+                                totalHold: { $sum: "$HA" }
+                            }
+                        },
+                    ],
+                    totalStatus: [
+                        {
+                            $group: {
+                                _id: "$S",
+                                totalStatus: { $sum: 1 }
+                            }
+                        }
+                    ],
+                    totalSanctionData: [
+                        {
+                            $group: {
+                                _id: "$SD",
+                                totalSD: { $sum: 1 },
+                                totalSA: { $sum: "$SA" }
+                            }
+                        }, { $sort: { totalSD: -1 } } // Sorting by totalSA in descending order
+                    ]
                 }
             }
         ];
         logger.debug('pipeline Dashboard', helper.fnStringlyJSON(pipeline))
-        const data = await mongoOps.fnAggregate(loanSchema, pipeline) || {};
+        const data = await mongoOps.fnAggregate(loanSchema, pipeline);
         return httpResponse.fnSuccess(res, await aes.fnEncryptAES(data));
     } catch (error) {
-        logger.warn('fnGetUserTeams ', error);
+        logger.warn('fnDashboard ', error);
         return httpResponse.fnBadRequest(res);
     }
 }
@@ -287,9 +314,10 @@ const fnListUser = async (req, res) => {
                 $facet: {
                     metadata: [{ $count: "total" }],
                     data: [
+                        { $sort: { createdAt: - 1 } },
                         { $skip: (page - 1) * limit },
                         { $limit: limit },
-                        { $project: { __v: 0, P: 0, UP: 0, _adminId: 0, updatedAt: 0 } }
+                        { $project: { __v: 0, P: 0, UP: 0, _adminId: 0, updatedAt: 0 } },
                     ]
                 }
             }
@@ -548,9 +576,10 @@ const fnListContact = async (req, res) => {
                 $facet: {
                     metadata: [{ $count: "total" }],
                     data: [
+                        { $sort: { createdAt: -1 } },
                         { $skip: (page - 1) * limit },
                         { $limit: limit },
-                        { $project: { PN: 1, CE: 1, D: 1, CT: 1 } }
+                        { $project: { PN: 1, CE: 1, D: 1, CT: 1, createdAt: 1 } }
                     ]
                 }
             }
@@ -721,6 +750,43 @@ const fnRemoveTeams = async (req, res) => {
     }
 }
 
+//Remove member from teams
+const fnRemoveTeamsMember = async (req, res) => {
+    try {
+        const BID = parseInt(req.currentUserData.BID) || 0;//UUID
+        const emailToRemove = req.body.E || null;
+        const data = await helper.fnParseJSON(req.body.V) || [];
+        if (!data.length) return httpResponse.fnForbidden(res);
+        const query = {
+            BID,
+            _id: { $in: data.map(id => new ObjectId(id)) }
+        };
+        const update = {
+            $pull: {
+                "TD.M": emailToRemove,
+                "TD.C": emailToRemove,
+                "CD.M": emailToRemove,
+                "CD.C": emailToRemove,
+                "C.M": emailToRemove,
+                "C.C": emailToRemove,
+                "CP.M": emailToRemove,
+                "CP.C": emailToRemove,
+                "CS.M": emailToRemove,
+                "CS.C": emailToRemove,
+                "PD.M": emailToRemove,
+                "PD.C": emailToRemove
+            }
+        };
+
+        const output = await mongoOps.fnUpdateMany(teamSchema, query, update);
+        logger.debug('output', output)
+        return httpResponse.fnSuccess(res);
+    } catch (error) {
+        logger.warn('fnRemoveTeams', error);
+        return httpResponse.fnBadRequest(res);
+    }
+}
+
 //Select Team for loan 
 const fnSelectTeam = async (req, res) => {
     try {
@@ -768,6 +834,7 @@ const fnListTeam = async (req, res) => {
                 $facet: {
                     metadata: [{ $count: "total" }],
                     data: [
+                        { $sort: { createdAt: -1 } },
                         { $skip: (page - 1) * limit },
                         { $limit: limit },
                         { $project: { N: 1, L: 1, S: 1, createdAt: 1 } }
@@ -830,9 +897,10 @@ const fnGetUserTeams = async (req, res) => {
                 $facet: {
                     metadata: [{ $count: "total" }],
                     data: [
+                        { $sort: { createdAt: -1 } },
                         { $skip: (page - 1) * limit },
                         { $limit: limit },
-                        { $project: { N: 1, L: 1, S: 1, createdAt: 1 } }
+                        { $project: { N: 1, L: 1, S: 1, createdAt: 1, TD: 1, CD: 1, C: 1, CP: 1, CS: 1, PD: 1 } }
                     ]
                 }
             }
@@ -1127,9 +1195,10 @@ const fnListDocsDetail = async (req, res) => {
                 $facet: {
                     metadata: [{ $count: "total" }],
                     data: [
+                        { $sort: { ED: 1 } },
                         { $skip: (page - 1) * limit },
                         { $limit: limit },
-                        { $project: { _v: 0 } }
+                        { $project: { _v: 0 } },
                     ]
                 }
             }
@@ -1503,9 +1572,10 @@ const fnAssignListDocsDetail = async (req, res) => {
                 $facet: {
                     metadata: [{ $count: "total" }],
                     data: [
+                        { $sort: { SD: -1 } },
                         { $skip: (page - 1) * limit },
                         { $limit: limit },
-                        { $project: { _v: 0 } }
+                        { $project: { _v: 0 } },
                     ]
                 }
             }
@@ -1641,6 +1711,7 @@ const fnAssignListDefault = async (req, res) => {
                 $facet: {
                     metadata: [{ $count: "total" }],
                     data: [
+                        { $sort: { SD: -1 } },
                         { $skip: (page - 1) * limit },
                         { $limit: limit },
                         { $project: { _v: 0 } }
@@ -1782,6 +1853,7 @@ const fnAssignListCriticalCase = async (req, res) => {
                 $facet: {
                     metadata: [{ $count: "total" }],
                     data: [
+                        { $sort: { SD: -1 } },
                         { $skip: (page - 1) * limit },
                         { $limit: limit },
                         { $project: { _v: 0 } }
@@ -1818,7 +1890,7 @@ const fnMSTListDocsDetail = async (req, res) => {
         }
 
 
-        const query = [
+        const pipeline = [
             {
                 $match: {
                     BID
@@ -1883,6 +1955,7 @@ const fnMSTListDocsDetail = async (req, res) => {
                 $facet: {
                     metadata: [{ $count: "total" }],
                     data: [
+                        { $sort: { SD: -1 } },
                         { $skip: (page - 1) * limit },
                         { $limit: limit },
                         { $project: { _v: 0 } }
@@ -1890,8 +1963,8 @@ const fnMSTListDocsDetail = async (req, res) => {
                 }
             }
         ];
-        logger.debug('{MST} QuErY', helper.fnStringlyJSON(query));
-        let output = await mongoOps.fnAggregate(teamSchema, query);
+        logger.debug('{MST} QuErY', helper.fnStringlyJSON(pipeline));
+        let output = await mongoOps.fnAggregate(teamSchema, pipeline);
         const data = await aes.fnEncryptAES(output);
         return httpResponse.fnSuccess(res, data);
         // return output;
@@ -1977,6 +2050,7 @@ const fnMSTListDefault = async (req, res) => {
                 $facet: {
                     metadata: [{ $count: "total" }],
                     data: [
+                        { $sort: { SD: -1 } },
                         { $skip: (page - 1) * limit },
                         { $limit: limit },
                         { $project: { _v: 0 } }
@@ -2074,6 +2148,7 @@ const fnMSTListCriticalCase = async (req, res) => {
                 $facet: {
                     metadata: [{ $count: "total" }],
                     data: [
+                        { $sort: { SD: -1 } },
                         { $skip: (page - 1) * limit },
                         { $limit: limit },
                         { $project: { _v: 0 } }
@@ -2220,6 +2295,7 @@ const fnMSTAssignListDocsDetail = async (req, res) => {
                 $facet: {
                     metadata: [{ $count: "total" }],
                     data: [
+                        { $sort: { SD: -1 } },
                         { $skip: (page - 1) * limit },
                         { $limit: limit },
                         { $project: { _v: 0 } }
@@ -2290,6 +2366,7 @@ module.exports = {
     fnMSTListDefault,
     fnMSTListCriticalCase,
     fnRemoveTeams,
+    fnRemoveTeamsMember,
     fnDashboard
 }
 
