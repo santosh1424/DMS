@@ -53,7 +53,10 @@ const fnSave = async (collectionName, documents) => {
 };
 
 const fnUpdateMany = async (collectionName, query, update) => {
-    return await collectionName.updateMany(query, update);
+    return { updateData: await collectionName.find(query, { _id: 1 }), metaData: await collectionName.updateOne(query, update) }
+};
+const fnUpdateOne = async (collectionName, query, update) => {
+    return { updateData: await collectionName.findOne(query, { _id: 1 }), metaData: await collectionName.updateOne(query, update) }
 };
 
 // Fetch and update documents, then save the updated documents to the data object
@@ -75,5 +78,6 @@ module.exports = {
     fnSave,
     fnFindById,
     fnUpdateMany,
+    fnUpdateOne
     // fnUpdateAndFetch
 }

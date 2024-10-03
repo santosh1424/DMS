@@ -40,6 +40,7 @@ router.get('/listTeam', validate.fnAuthenticateToken, allinOneController.fnListT
 router.get('/userTeams', validate.fnAuthenticateToken, allinOneController.fnGetUserTeams);
 router.post('/removeTeams', validate.fnDecryptBody, validate.fnAuthenticateToken, allinOneController.fnRemoveTeams);
 router.post('/removeTeamsMember', validate.fnDecryptBody, validate.fnAuthenticateToken, allinOneController.fnRemoveTeamsMember);
+router.post('/replaceTeamsMember', validate.fnDecryptBody, validate.fnAuthenticateToken, allinOneController.fnReplaceTeamsMember);
 router.post('/selectTeam', validate.fnDecryptBody, validate.fnAuthenticateToken, allinOneController.fnSelectTeam);
 router.get('/suggestion', validate.fnAuthenticateToken, allinOneController.fnSuggestion);
 

@@ -7,8 +7,16 @@
 const mongoose = require('mongoose');
 
 const mstSchema = new mongoose.Schema({
-    N: { type: String, required: true },
-    V: { type: Array, required: true },
+    Z: [{ V: { type: String, required: true }, S: { type: String, default: 'active' } }],
+    LP: [{ V: { type: String, required: true }, S: { type: String, default: 'active' } }],
+    I: [{ V: { type: String, required: true }, S: { type: String, default: 'active' } }],
+    LT: [{ V: { type: String, required: true }, S: { type: String, default: 'active' } }],
+    FT: [{ V: { type: String, required: true }, S: { type: String, default: 'active' } }],
+    ST: [{ V: { type: String, required: true }, S: { type: String, default: 'active' } }],
+    TD: [{ V: { type: String, required: true }, S: { type: String, default: 'active' } }],
+    CD: [{ V: { type: String, required: true }, S: { type: String, default: 'active' } }],
+    CP: [{ V: { type: String, required: true }, S: { type: String, default: 'active' } }],
+    CS: [{ V: { type: String, required: true }, S: { type: String, default: 'active' } }],
     BID: {
         type: Number,
         required: true,

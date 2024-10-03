@@ -106,7 +106,7 @@ const fnDashboard = async (req, res) => {
                 }
             }
         ];
-        logger.debug('pipeline Dashboard', helper.fnStringlyJSON(pipeline))
+        logger.debug('Dashboard', helper.fnStringlyJSON(pipeline))
         const data = await mongoOps.fnAggregate(loanSchema, pipeline);
         return httpResponse.fnSuccess(res, await aes.fnEncryptAES(data));
     } catch (error) {
@@ -674,11 +674,11 @@ const fnSuggestion = async (req, res) => {
         let data = {};
         //Relationship Mapping
         if (type == 'UM') {
-            data.U = await mongoOps.fnFind(userSchema, { BID, Z }, { N: 1, E: 1 })
-            data.R = await mongoOps.fnFind(roleSchema, { BID }, { N: 1, P: 1 })
-        } else if (type == 'RM') data = await mongoOps.fnFind(managerSchema, { BID }, { N: 1, E: 1, Z: 1 })
-        else if (type == 'TL') data = await mongoOps.fnFind(userSchema, { BID, RM }, { N: 1, E: 1, _id: 0 }) //Team Lead Assingment 
-        else if (type == 'AU') data = await mongoOps.fnFind(userSchema, { BID }, { N: 1, E: 1, _id: 0 }) //ALL User
+            data.U = await mongoOps.fnFind(userSchema, { BID, Z }, { N: 1, E: 1 });
+            data.R = await mongoOps.fnFind(roleSchema, { BID }, { N: 1, P: 1 });
+        } else if (type == 'RM') data = await mongoOps.fnFind(managerSchema, { BID }, { N: 1, E: 1, Z: 1 });
+        else if (type == 'TL') data = await mongoOps.fnFind(userSchema, { BID, RM, S: 'active' }, { N: 1, E: 1, _id: 0 }); //Team Lead Assingment 
+        else if (type == 'AU') data = await mongoOps.fnFind(userSchema, { BID, S: 'active' }, { N: 1, E: 1, _id: 0 }); //ALL User
         // logger.debug('suggtion', type, data, { BID, Z })
         data = await aes.fnEncryptAES(data);
         return httpResponse.fnSuccess(res, data);
@@ -756,7 +756,7 @@ const fnRemoveTeamsMember = async (req, res) => {
         const BID = parseInt(req.currentUserData.BID) || 0;//UUID
         const emailToRemove = req.body.E || null;
         const data = await helper.fnParseJSON(req.body.V) || [];
-        if (!data.length) return httpResponse.fnForbidden(res);
+        if (!data.length) return httpResponse.fnPreConditionFailed(res);
         const query = {
             BID,
             _id: { $in: data.map(id => new ObjectId(id)) }
@@ -786,6 +786,105 @@ const fnRemoveTeamsMember = async (req, res) => {
         return httpResponse.fnBadRequest(res);
     }
 }
+
+const fnReplaceTeamsMember = async (req, res) => {
+    try {
+        const BID = parseInt(req.currentUserData.BID) || 0; // UUID
+        const emailToReplace = req.body.E || null;   // Old email to be replaced
+        const newEmail = req.body.NE || null;         // New email to replace with
+        const data = await helper.fnParseJSON(req.body.V) || [];//[]
+        if (!data.length || !emailToReplace || !newEmail) {
+            return httpResponse.fnPreConditionFailed(res);
+        }
+
+        // Check if all IDs are valid ObjectId strings
+        const validIds = data.map(id => {
+            if (ObjectId.isValid(id)) {
+                return new ObjectId(id); // Convert to ObjectId if valid
+            } else {
+                throw new Error(`Invalid ObjectId: ${id}`); // Handle invalid ObjectId
+            }
+        });
+
+        // Query to find documents containing the old email
+        const query = {
+            BID,
+            _id: { $in: validIds },
+            $or: [
+                { "TD.M": emailToReplace },
+                { "TD.C": emailToReplace },
+                { "CD.M": emailToReplace },
+                { "CD.C": emailToReplace },
+                { "C.M": emailToReplace },
+                { "C.C": emailToReplace },
+                { "CP.M": emailToReplace },
+                { "CP.C": emailToReplace },
+                { "CS.M": emailToReplace },
+                { "CS.C": emailToReplace },
+                { "PD.M": emailToReplace },
+                { "PD.C": emailToReplace }
+            ]
+        };
+
+        // Step 1: Use mongoOps.fnFind to get all documents matching the query
+        const documents = await mongoOps.fnFind(teamSchema, query);
+
+        if (!documents.length) return httpResponse.fnConflict(res);
+
+        // Prepare updates for each document based on where the old email was found
+        for (const doc of documents) {
+            const updateFields = {}; // To collect specific fields for $addToSet later
+
+            // Pull old email
+            const pullUpdate = {
+                $pull: {
+                    "TD.M": emailToReplace,
+                    "TD.C": emailToReplace,
+                    "CD.M": emailToReplace,
+                    "CD.C": emailToReplace,
+                    "C.M": emailToReplace,
+                    "C.C": emailToReplace,
+                    "CP.M": emailToReplace,
+                    "CP.C": emailToReplace,
+                    "CS.M": emailToReplace,
+                    "CS.C": emailToReplace,
+                    "PD.M": emailToReplace,
+                    "PD.C": emailToReplace
+                }
+            };
+
+            // Check which fields contain the old email and add them to the updateFields
+            if (doc.TD?.M?.includes(emailToReplace)) updateFields["TD.M"] = newEmail;
+            if (doc.TD?.C?.includes(emailToReplace)) updateFields["TD.C"] = newEmail;
+            if (doc.CD?.M?.includes(emailToReplace)) updateFields["CD.M"] = newEmail;
+            if (doc.CD?.C?.includes(emailToReplace)) updateFields["CD.C"] = newEmail;
+            if (doc.C?.M?.includes(emailToReplace)) updateFields["C.M"] = newEmail;
+            if (doc.C?.C?.includes(emailToReplace)) updateFields["C.C"] = newEmail;
+            if (doc.CP?.M?.includes(emailToReplace)) updateFields["CP.M"] = newEmail;
+            if (doc.CP?.C?.includes(emailToReplace)) updateFields["CP.C"] = newEmail;
+            if (doc.CS?.M?.includes(emailToReplace)) updateFields["CS.M"] = newEmail;
+            if (doc.CS?.C?.includes(emailToReplace)) updateFields["CS.C"] = newEmail;
+            if (doc.PD?.M?.includes(emailToReplace)) updateFields["PD.M"] = newEmail;
+            if (doc.PD?.C?.includes(emailToReplace)) updateFields["PD.C"] = newEmail;
+
+            // If there are fields where the old email was found, perform the update
+            if (Object.keys(updateFields).length) {
+                const addToSetUpdate = {
+                    $addToSet: updateFields
+                };
+
+                // Step 2: Perform pull and addToSet operations
+                await mongoOps.fnUpdateOne(teamSchema, { _id: doc._id }, pullUpdate);
+                await mongoOps.fnUpdateOne(teamSchema, { _id: doc._id }, addToSetUpdate);
+            }
+        }
+        // logger.debug('output', output, 'query', helper.fnStringlyJSON(query));
+        return httpResponse.fnSuccess(res);
+    } catch (error) {
+        logger.warn('fnReplaceTeamsMember', error);
+        return httpResponse.fnBadRequest(res);
+    }
+};
 
 //Select Team for loan 
 const fnSelectTeam = async (req, res) => {
@@ -913,7 +1012,7 @@ const fnGetUserTeams = async (req, res) => {
     }
 }
 
-//Adding MST 
+//Update MST 
 const fnUpdateMST = async (req, res) => {
     try {
         const BID = parseInt(req.currentUserData.BID) || 0;//UUID
@@ -924,12 +1023,12 @@ const fnUpdateMST = async (req, res) => {
         if (_id) {
             const userPremission = await _fnVaildatingPermission(req.currentUserData._userId, 'masters', 'edit');
             if (!userPremission) return httpResponse.fnForbidden(res);
-            await mongoOps.fnFindOneAndUpdate(mstSchema, { BID, _id: new ObjectId(_id) }, { V: req.body.V })
+            await mongoOps.fnFindOneAndUpdate(mstSchema, { BID, _id: new ObjectId(_id) }, { ...req.body })
         }
         else {
             const userPremission = await _fnVaildatingPermission(req.currentUserData._userId, 'masters', 'add');
             if (!userPremission) return httpResponse.fnForbidden(res);
-            await mongoOps.fnInsertOne(mstSchema, { BID, N: req.body.N, V: req.body.V });
+            await mongoOps.fnInsertOne(mstSchema, { BID, ...req.body });
         }
         logger.debug('Updating MST.... _id', _id, req.body)
         return httpResponse.fnSuccess(res);
@@ -2367,6 +2466,7 @@ module.exports = {
     fnMSTListCriticalCase,
     fnRemoveTeams,
     fnRemoveTeamsMember,
+    fnReplaceTeamsMember,
     fnDashboard
 }
 
