@@ -177,8 +177,7 @@ const roleVaildate = [
     check("P", "Permission is Required").not().isEmpty().trim()
 ];
 const mstVaildate = [
-    check("N", "Name is Required").not().isEmpty().trim(),
-    check("V", "Value is Required").not().isEmpty().trim()
+
 ];
 const ratingVaildate = [
     check("A", "Agency is Required").not().isEmpty().trim(),

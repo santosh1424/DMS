@@ -1018,17 +1018,43 @@ const fnUpdateMST = async (req, res) => {
         const BID = parseInt(req.currentUserData.BID) || 0;//UUID
         const _id = req.body._id || null;
 
-        if (!BID || _id && !ObjectId.isValid(_id)) return httpResponse.fnPreConditionFailed(res);
+        if (!BID || _id && !ObjectId.isValid(_id) || !req.body) return httpResponse.fnPreConditionFailed(res);
+        const body = {}
+        body['BID'] = BID
+        if (req.body.LP) body['LP'] = req.body.LP;
+        if (req.body.ZL) body['ZL'] = req.body.ZL;
+        if (req.body.FT) body['FT'] = req.body.FT;
+        if (req.body.IN) body['IN'] = req.body.IN;
+        if (req.body.LT) body['LT'] = req.body.LT;
+        if (req.body.DRR) body['DRR'] = req.body.DRR;
+        if (req.body.TRP) body['TRP'] = req.body.TRP;
+        if (req.body.PS) body['PS'] = req.body.PS;
+        if (req.body.DF) body['DF'] = req.body.DF;
+        if (req.body.LST) body['LST'] = req.body.LST;
+        if (req.body.BAT) body['BAT'] = req.body.BAT;
+        if (req.body.CT) body['CT'] = req.body.CT;
+        if (req.body.ER) body['ER'] = req.body.ER;
+        if (req.body.RA) body['RA'] = req.body.RA;
+        if (req.body.RT) body['RT'] = req.body.RT;
+        if (req.body.RO) body['RO'] = req.body.RO;
+        if (req.body.TC) body['TC'] = req.body.TC;
+        if (req.body.CC) body['CC'] = req.body.CC;
+        if (req.body.CV) body['CV'] = req.body.CV;
+        if (req.body.CTY) body['CTY'] = req.body.CTY;
+        if (req.body.CPC) body['CPC'] = req.body.CPC;
+        if (req.body.CSC) body['CSC'] = req.body.CSC;
+
+        if (Object.keys(body).length === 0) return httpResponse.fnConflict(res);
 
         if (_id) {
             const userPremission = await _fnVaildatingPermission(req.currentUserData._userId, 'masters', 'edit');
             if (!userPremission) return httpResponse.fnForbidden(res);
-            await mongoOps.fnFindOneAndUpdate(mstSchema, { BID, _id: new ObjectId(_id) }, { ...req.body })
-        }
-        else {
+            logger.debug('BODY', body)
+            await mongoOps.fnFindOneAndUpdate(mstSchema, { BID, _id: new ObjectId(_id) }, { ...body })
+        } else {
             const userPremission = await _fnVaildatingPermission(req.currentUserData._userId, 'masters', 'add');
             if (!userPremission) return httpResponse.fnForbidden(res);
-            await mongoOps.fnInsertOne(mstSchema, { BID, ...req.body });
+            await mongoOps.fnInsertOne(mstSchema, { BID, ...body });
         }
         logger.debug('Updating MST.... _id', _id, req.body)
         return httpResponse.fnSuccess(res);
@@ -1048,23 +1074,7 @@ const fnListMST = async (req, res) => {
         const BID = parseInt(req.currentUserData.BID) || 0;
         if (!BID) return httpResponse.fnPreConditionFailed(res);
 
-        const page = parseInt(req.query.page) || 1;
-        const limit = parseInt(req.query.limit) || 10;
-        const pipeline = [
-            { $match: { BID } },
-            {
-                $facet: {
-                    metadata: [{ $count: "total" }],
-                    data: [
-                        { $skip: (page - 1) * limit },
-                        { $limit: limit },
-                        { $project: { N: 1, V: 1, S: 1 } }
-                    ]
-                }
-            }
-        ];
-
-        return httpResponse.fnSuccess(res, await aes.fnEncryptAES(await mongoOps.fnAggregate(mstSchema, pipeline)));
+        return httpResponse.fnSuccess(res, await aes.fnEncryptAES(await mongoOps.fnFindOne(mstSchema, { BID })));
     } catch (error) {
         logger.warn('fnListMST', error);
         return httpResponse.fnBadRequest(res);
