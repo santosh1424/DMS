@@ -674,11 +674,11 @@ const fnSuggestion = async (req, res) => {
         let data = {};
         //Relationship Mapping
         if (type == 'UM') {
-            data.U = await mongoOps.fnFind(userSchema, { BID, Z, S: 'active' }, { N: 1, E: 1 });
-            data.R = await mongoOps.fnFind(roleSchema, { BID, S: 'active' }, { N: 1, P: 1 });
-        } else if (type == 'RM') data = await mongoOps.fnFind(managerSchema, { BID, S: 'active' }, { N: 1, E: 1, Z: 1 });
-        else if (type == 'TL') data = await mongoOps.fnFind(userSchema, { BID, RM, S: 'active' }, { N: 1, E: 1, _id: 0 }); //Team Lead Assingment 
-        else if (type == 'AU') data = await mongoOps.fnFind(userSchema, { BID, S: 'active' }, { N: 1, E: 1, _id: 0 }); //ALL User
+            data.U = await mongoOps.fnFind(userSchema, { BID, Z, S: 'Active' }, { N: 1, E: 1 });
+            data.R = await mongoOps.fnFind(roleSchema, { BID, S: 'Active' }, { N: 1, P: 1 });
+        } else if (type == 'RM') data = await mongoOps.fnFind(managerSchema, { BID, S: 'Active' }, { N: 1, E: 1, Z: 1 });
+        else if (type == 'TL') data = await mongoOps.fnFind(userSchema, { BID, RM, S: 'Active' }, { N: 1, E: 1, _id: 0 }); //Team Lead Assingment 
+        else if (type == 'AU') data = await mongoOps.fnFind(userSchema, { BID, S: 'Active' }, { N: 1, E: 1, _id: 0 }); //ALL User
         // logger.debug('suggtion', type, data, { BID, Z })
         data = await aes.fnEncryptAES(data);
         return httpResponse.fnSuccess(res, data);
