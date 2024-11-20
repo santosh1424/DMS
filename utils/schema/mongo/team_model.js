@@ -39,12 +39,17 @@ const teamSchema = new mongoose.Schema({
         C: { type: Array, required: true },//{ type: Object, required: true, },
         _id: false
     },
+    PD: {
+        M: { type: Array, required: true },//{ type: Object, required: true, },
+        C: { type: Array, required: true },//{ type: Object, required: true, },
+        _id: false
+    },
     S: {
         type: String,
         required: true,
         trim: true,
-        enum: ['active', 'inactive'],
-        default: 'active'
+        enum: ['Active', 'Inactive'],
+        default: 'Active'
     },
     // _loanId: {
     //     type: mongoose.Schema.Types.ObjectId,
@@ -66,6 +71,7 @@ module.exports = mongoose.model('team_model', teamSchema);
  * C - Covenants {M:[],C:[]}
  * CP - Condition Precedent {M:[],C:[]}
  * CS - Condition Subsequent {M:[],C:[]}
+ * PD - Payment Details {M:[],C:[]}
  * S- Status  default 1 
  *  1-Active
  *  2-Inactive

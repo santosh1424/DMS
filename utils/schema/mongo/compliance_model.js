@@ -9,7 +9,8 @@ const mongoose = require('mongoose');
 const complianceSchema = new mongoose.Schema({
     BID: { type: Number, required: true },
     P: { type: String, required: true },
-    R: { type: String, required: true, trim: true, },
+    DEF: { type: Number },
+    R: { type: String, trim: true, },
     SD: { type: Date, required: true },
     ED: { type: Date, required: true },
     EL: { type: String },
@@ -21,7 +22,7 @@ const complianceSchema = new mongoose.Schema({
         type: String,
         required: true,
         trim: true,
-        enum: ['Pending', 'In progress', 'Complete'],
+        enum: ['Pending', 'In progress', 'Verified'],
         default: 'Pending'
     },
     _loanId: {

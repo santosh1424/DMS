@@ -20,6 +20,7 @@ global.redisOps = require('./utils/redisOps');
 global.redisKeys = require('./utils/schema/redis/redisKeys');
 global.redisClient = new Redis(constants.REDIS_URI);//Redis Connection
 global.redisSubscriber = new Redis(constants.REDIS_URI);//Redis Connection
+global.mycrons = require('./config/mycron_config');
 // global.aes = require('./utils/aes');
 const { fnDbConnection } = require('./config/database_config');
 const { fnMaintenancesCheck } = require('./middleware/vaildator');
@@ -32,29 +33,25 @@ const { fnConfigureSocketIO } = require('./config/socketConfig');
         app.use(express.urlencoded({ extended: true }));//Middleware to parse URL-encoded data
         app.use(express.json());//Middleware to parse JSON data
 
-        // Trust proxy to handle headers correctly
-        // app.set('trust proxy', 1);
+        // Define CORS options
+        const corsOptions = {
+            origin:
+                "*"
+                // function (origin, callback) {
+                //     logger.debug(constants.ALLOWED_ORIGINS.indexOf(origin), origin, constants.ALLOWED_ORIGINS)
+                //     if (!origin || constants.ALLOWED_ORIGINS.indexOf(origin) !== -1) {
+                //         // Allow requests with a matching origin or if origin is undefined (e.g., from server-side)
+                //         callback(null, true);
+                //     } else {
+                //         // Disallow requests with origins not in the allowedOrigins 
+                //         callback(new Error('Not allowed by CORS'));
+                //     }
+                // }
+        };
 
-        // const allowedOrigins = ["http://127.0.0.1"];
+        app.use(cors(corsOptions));   // Use the CORS middleware with custom options
 
-        // // Define CORS options
-        // const corsOptions = {
-        //     origin: function (origin, callback) {
-        //         console.log("Origin:", origin); // Log the origin value
-        //         if (allowedOrigins.indexOf(origin) !== -1 || !origin) {
-        //             // Allow requests with a matching origin or if origin is undefined (e.g., from server-side)
-        //             callback(null, true);
-        //         } else {
-        //             // Disallow requests with origins not in the allowedOrigins 
-        //             callback(new Error('Not allowed by CORS'));
-        //         }
-        //     }
-        // };
-
-        // Use the CORS middleware with custom options
-        app.use(cors());
-        // Use maintenance middleware for all routes
-        app.use(fnMaintenancesCheck);
+        app.use(fnMaintenancesCheck);        // Use maintenance middleware for all routes
 
         app.get('/health', (req, res) => res.sendStatus(200).end());
         app.use(require('./routes'));
@@ -67,18 +64,27 @@ const { fnConfigureSocketIO } = require('./config/socketConfig');
         const fnListenServer = async (http) => {
             await http.listen(constants.PORT, constants.LOCAL_IP, async () => {
                 try {
+                    // Redis connection listeners
+                    global.redisClient.on('ready', () => {
+                        logger.info('Redis Client Connected successfully');
+                    });
+                    global.redisClient.on('error', (err) => {
+                        logger.warn('Redis Client error:', err);
+                    });
                     await fnDbConnection(constants.MONGODB_URI);//MongoDB Connection
                     const io = socketIO(http, {
                         reconnection: true,// Enable reconnection
                         reconnectionDelay: 1000, // Delay between reconnection attempts (in milliseconds)
-                        // reconnectionAttempts: 3, // Number of reconnection attempts
+                        reconnectionAttempts: 3, // Number of reconnection attempts
                         cors: {
-                            origin: ["https://dms-site.vercel.app/"]
+                            origin: corsOptions
                         }
                     });
                     //socket fnMaintenancesCheck
                     io.use((res, next) => (parseInt(constants.UNDER_MAINTENANCE_MODE)) ? next(httpResponse.fnServiceUnavailable(res)) : next());
                     await fnConfigureSocketIO(io);//Socket Connection
+                    await mycrons.fnDefaultCheck();//cron
+                    // await mycrons.fnSendNotification();//cron
                     logger.info('Server is Up and Running', http.address());
                 } catch (error) {
                     logger.warn(`fnListenServer`, error);

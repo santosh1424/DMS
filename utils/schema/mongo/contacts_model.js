@@ -8,9 +8,9 @@ const mongoose = require('mongoose');
 
 const contactDetailsSchema = new mongoose.Schema({
     BID: { type: Number, required: true },          // Business ID
-    CT: { type: String, },           // Contact Type (e.g., Customer, Vendor, Supplier, etc.)
-    RT: { type: String, },           // Recipient Type(e.g to,cc,bcc)
-    CE: { type: String, trim: true, unique: true },                       // Contant Email
+    CT: { type: String },           // Contact Type (e.g., Customer, Vendor, Supplier, etc.)
+    RT: { type: String },           // Recipient Type(e.g to,cc,bcc)
+    CE: { type: String, trim: true },                       // Contant Email
     CN: { type: String, trim: true },                       // Company Name
     PN: { type: String, trim: true },                       // Person Name
     D: { type: String, trim: true },                        // Designation

@@ -135,6 +135,19 @@ const addDocsDetails = [
     check("SD", "StartDate is Required").not().isEmpty().trim(),
     check("ED", "EndDate is Required").not().isEmpty().trim(),
 ];
+
+const updatePaymentDetails = [
+    check('_loanId', 'Loan ID is required').optional().trim(),
+    check('_id', '_id is required').optional().trim(),
+    check('F', 'Frequency is required').optional().trim().isIn(['Daily', 'Weekly', 'Monthly', 'Quarterly', 'Half-Yearly', 'Yearly']),
+    check('P', 'Principal is required').optional().trim().isNumeric(),
+    check('SD', 'Start Date is required').optional().trim(),//.isISO8601(),
+    check('ED', 'End Date is required').optional().trim(),//.isISO8601(),
+    check('T', 'Type is required').optional().trim().isIn(['Fixed', 'Manual']),
+    check('I', 'Interest is required').optional().trim().isNumeric(),
+    check('H', 'Holiday option is required').optional().trim().isIn(['Subsequent', 'Precedent', 'None']),
+    check('GS', 'General settings are required').notEmpty()
+];
 const editDocsDetails = [
     check("_id", "_id is Required").not().isEmpty().trim(),
 ];
@@ -156,13 +169,15 @@ const teamAddVaildate = [
     check("CP", "CP is Required").not().isEmpty(),
     // check("_loanId", "loanId is Required").not().isEmpty().trim(),
 ];
+const teamEditVaildate = [
+    check("_id", "Id is Required").not().isEmpty().trim(),
+];
 const roleVaildate = [
     check("N", "Name is Required").not().isEmpty().trim(),
     check("P", "Permission is Required").not().isEmpty().trim()
 ];
 const mstVaildate = [
-    check("N", "Name is Required").not().isEmpty().trim(),
-    check("v", "Value is Required").not().isEmpty().trim()
+
 ];
 const ratingVaildate = [
     check("A", "Agency is Required").not().isEmpty().trim(),
@@ -227,11 +242,13 @@ module.exports = {
     teamAddVaildate,
     fnMaintenancesCheck,
     // fnCheckPermission
+    teamEditVaildate,
     fnGetPermission,
     fnTD,
     fnFileData,
     uploadDocsVaildate,
     addDocsDetails,
     mstVaildate,
-    editDocsDetails
+    editDocsDetails,
+    updatePaymentDetails
 }

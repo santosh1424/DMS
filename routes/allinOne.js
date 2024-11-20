@@ -10,16 +10,16 @@ const express = require('express'), router = express.Router();
 const allinOneController = require('../controller/allinOneController');
 const validate = require('../middleware/vaildator')
 
-router.get('/data', allinOneController.fnTestApp);
 router.post('/encrypt', allinOneController.fnEncryptTest);
 router.post('/decrypt', allinOneController.fnDecryptTest);
 //Admin Routes
 router.post('/addAdmin', [validate.fnDecryptBody, validate.adminAddVaildate, validate.vaildator], allinOneController.fnAddAdmin);
 router.post('/login', [validate.fnDecryptBody, validate.loginVaildate, validate.vaildator], allinOneController.fnLogin);
 //Dashboard
-router.get('/dashboard', validate.fnAuthenticateToken, ((req, res) => {
-    res.send("Dashboard");
-}));
+router.get('/dashboard', validate.fnAuthenticateToken, allinOneController.fnDashboard)
+//((req, res) => {
+//res.send("Dashboard");
+//}));
 //User Routes
 router.post('/addUser', [validate.fnDecryptBody, validate.userAddVaildate, validate.fnAuthenticateToken, validate.vaildator], allinOneController.fnAddUser);
 router.post('/editUser', validate.fnDecryptBody, validate.fnAuthenticateToken, allinOneController.fnEditUser);
@@ -28,20 +28,24 @@ router.get('/listUser', validate.fnAuthenticateToken, allinOneController.fnListU
 
 //Loan Routes 
 router.post('/createAID', validate.fnDecryptBody, validate.fnAuthenticateToken, allinOneController.fnCreateAID);
-router.post('/createLoan', validate.fnDecryptBody, [validate.createLoanVaildate, validate.fnAuthenticateToken, validate.vaildator], allinOneController.fnCreateLoan);
+router.post('/updateLoan', validate.fnDecryptBody, [validate.createLoanVaildate, validate.fnAuthenticateToken, validate.vaildator], allinOneController.fnUpdateLoan);
 router.get('/listLoan', validate.fnAuthenticateToken, allinOneController.fnListLoan);
 router.get('/getLoan', validate.fnAuthenticateToken, allinOneController.fnGetLoan);
 
 //Teams
-router.post('/updateTeam', [validate.fnDecryptBody, validate.fnAuthenticateToken, validate.teamAddVaildate, validate.vaildator], allinOneController.fnUpdateTeam);
+router.post('/addTeam', [validate.fnDecryptBody, validate.fnAuthenticateToken, validate.teamAddVaildate, validate.vaildator], allinOneController.fnUpdateTeam);
+router.post('/editTeam', [validate.fnDecryptBody, validate.fnAuthenticateToken, validate.teamEditVaildate, validate.vaildator], allinOneController.fnUpdateTeam);
 router.get('/getTeam', validate.fnAuthenticateToken, allinOneController.fnGetTeam);
 router.get('/listTeam', validate.fnAuthenticateToken, allinOneController.fnListTeam);
+router.get('/userTeams', validate.fnAuthenticateToken, allinOneController.fnGetUserTeams);
+router.post('/removeTeams', validate.fnDecryptBody, validate.fnAuthenticateToken, allinOneController.fnRemoveTeams);
+router.post('/removeTeamsMember', validate.fnDecryptBody, validate.fnAuthenticateToken, allinOneController.fnRemoveTeamsMember);
+router.post('/replaceTeamsMember', validate.fnDecryptBody, validate.fnAuthenticateToken, allinOneController.fnReplaceTeamsMember);
 router.post('/selectTeam', validate.fnDecryptBody, validate.fnAuthenticateToken, allinOneController.fnSelectTeam);
 router.get('/suggestion', validate.fnAuthenticateToken, allinOneController.fnSuggestion);
 
 //mst 
-router.post('/addMST', [validate.fnDecryptBody, validate.mstVaildate, validate.fnAuthenticateToken, validate.vaildator], allinOneController.fnAddMST);
-router.post('/addMST', [validate.fnDecryptBody, validate.mstVaildate, validate.fnAuthenticateToken, validate.vaildator], allinOneController.fnEditMST);
+router.post('/updateMST', validate.fnDecryptBody, validate.fnAuthenticateToken, allinOneController.fnUpdateMST);
 router.get('/listMST', validate.fnAuthenticateToken, allinOneController.fnListMST);
 
 //Roles
@@ -52,10 +56,11 @@ router.get('/listRole', validate.fnAuthenticateToken, allinOneController.fnListR
 router.post('/addRating', [validate.fnDecryptBody, validate.ratingVaildate, validate.fnAuthenticateToken, validate.vaildator], allinOneController.fnAddRating);
 router.get('/listRating', validate.fnAuthenticateToken, allinOneController.fnListRating);
 //Contact Routes 
-router.post('/createContact', validate.fnDecryptBody, [validate.createContactVaildate, validate.fnAuthenticateToken, validate.vaildator], allinOneController.fnCreateContact);
+router.post('/updateContact', validate.fnDecryptBody, [validate.createContactVaildate, validate.fnAuthenticateToken, validate.vaildator], allinOneController.fnUpdateContact);
 router.get('/listContact', validate.fnAuthenticateToken, allinOneController.fnListContact);
 router.get('/getContact', validate.fnAuthenticateToken, allinOneController.fnGetContact);
 router.delete('/deleteContact', validate.fnAuthenticateToken, allinOneController.fnDeleteContact);
+router.delete('/deleteLoan', validate.fnAuthenticateToken, allinOneController.fnDeleteLoan);
 
 // Email
 router.get('/sendOTP', validate.fnAuthenticateToken, allinOneController.fnSendOTP);
@@ -65,13 +70,24 @@ router.post('/verifyOTP', validate.fnDecryptBody, validate.fnAuthenticateToken, 
 
 router.post('/addDocsDetails', validate.fnAuthenticateToken, validate.fnDecryptBody, [validate.addDocsDetails, validate.vaildator], allinOneController.fnAddDocsDetails);//ADD 
 router.post('/editDocsDetails', validate.fnAuthenticateToken, validate.fnDecryptBody, [validate.editDocsDetails, validate.vaildator], allinOneController.fnEditDocsDetails);//EDIT 
-router.post('/uploadDocs', validate.fnAuthenticateToken, allinOneController.fnUploadTD);//ADD  validate.fnFileData,  validate.fnDecryptBody, [validate.uploadDocsVaildate, validate.vaildator],
+router.post('/uploadDocs', validate.fnAuthenticateToken, allinOneController.fnUploadDocs);//ADD  validate.fnFileData,  validate.fnDecryptBody, [validate.uploadDocsVaildate, validate.vaildator],
+router.post('/updatePaymentDetails', validate.fnAuthenticateToken, validate.fnDecryptBody, [validate.updatePaymentDetails, validate.vaildator], allinOneController.fnUpdatePaymentDetails);//ADD 
+router.get('/listPaymentDetails', validate.fnAuthenticateToken, allinOneController.fnListPaymentDetails);
 router.get('/listDocs', validate.fnAuthenticateToken, allinOneController.fnListDocs);
 router.get('/listDocsDetail', validate.fnAuthenticateToken, allinOneController.fnListDocsDetail);
 router.get('/viewDocs', validate.fnAuthenticateToken, allinOneController.fnViewDocs);
 router.delete('/deleteDocs', validate.fnAuthenticateToken, allinOneController.fnDeleteDocs);
 router.get('/downloadDocs', validate.fnAuthenticateToken, allinOneController.fnDownloadDocs);
 router.get('/assignlistDocsDetail', validate.fnAuthenticateToken, allinOneController.fnAssignListDocsDetail);
+router.get('/assignlistDefault', validate.fnAuthenticateToken, allinOneController.fnAssignListDefault);
+router.get('/assignlistCriticalCases', validate.fnAuthenticateToken, allinOneController.fnAssignListCriticalCase);
+
+//Master Listing
+router.get('/mst/listDocsDetail', validate.fnAuthenticateToken, allinOneController.fnMSTListDocsDetail);//all docs in BID
+router.get('/mst/assignlistDocsDetail', validate.fnAuthenticateToken, allinOneController.fnMSTAssignListDocsDetail);//Seleted user assign document in BID
+router.get('/mst/listDefault', validate.fnAuthenticateToken, allinOneController.fnMSTListDefault);
+router.get('/mst/listCriticalCases', validate.fnAuthenticateToken, allinOneController.fnMSTListCriticalCase);
+router.get('/data', allinOneController.fnTestApp);
 
 
 module.exports = router

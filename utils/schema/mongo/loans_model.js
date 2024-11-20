@@ -23,12 +23,17 @@ const loanSchema = new mongoose.Schema({
     I: { type: String, trim: true }, // Industry (Drop Down)
     SA: { type: Number, trim: true }, // Sanctioned Amount
     HA: { type: Number, trim: true }, // Hold Amount
-    // DA: { type: Number,  }, // Downsell Amount
-    DD: { type: Date }, // Downsell Date
-    PS: { type: String }, // Project Status (Drop Down)
-    OA: { type: Number }, // Outstanding Amount
-    T: { type: String }, // Loan Type (Drop Down)
+    // DA: { type: Number,  },// Downsell Amount
+    DD: { type: Date },      // Downsell Date
+    PS: { type: String },   // Project Status (Drop Down)
+    OA: { type: Number },  // Outstanding Amount
+    T: { type: String },  // Loan Type (Drop Down)
     P: { type: String }, // Loan Product (Drop Down)
+    S: {                // Loan Status (Drop Down)
+        type: String,
+        trim: true,
+        enum: ['Preliminary', 'Document', 'Live', 'Hold', 'Cancel']
+    },
     ST: { type: String }, // Secured/Unsecured (Drop Down)
     SD: { type: Date }, // Sanctioned Date
     CD: { type: Date }, // Loan Closure Date

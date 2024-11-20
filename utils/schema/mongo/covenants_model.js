@@ -9,19 +9,20 @@ const mongoose = require('mongoose');
 const covenantsSchema = new mongoose.Schema({
     BID: { type: Number, required: true },
     N: { type: String, required: true, trim: true },
-    R: { type: String, required: true, trim: true, },
+    R: { type: String, trim: true, },
     C: { type: String, required: true },
     FD: { type: Object, trim: true },
     S: {
         type: String,
         required: true,
         trim: true,
-        enum: ['Pending', 'In progress', 'Complete'],
+        enum: ['Pending', 'In progress', 'Verified'],
         default: 'Pending'
     },
     T: { type: String, required: true },
-    F: { type: Number },
+    F: { type: String, enum: ['Daily', 'Weekly', 'Monthly', 'Quarterly', 'Half-Yearly', 'Yearly'] },
     P: { type: String, required: true },
+    DEF: { type: Number },
     SD: { type: Date, required: true },
     ED: { type: Date, required: true },
     EL: { type: String },

@@ -22,7 +22,10 @@ const {
     subsequentSchema,
     precedentSchema,
     mstSchema,
-    managerSchema
+    managerSchema,
+    paymentSchema
+    // ,
+    // allDocsSchema
 } = require('../utils/schema/mongo/index');
 const aes = require('../utils/aes');
 const redisKeys = require('../utils/schema/redis/redisKeys');
@@ -35,18 +38,81 @@ const path = require('path');
 const fs = require('fs');
 const multer = require('multer');
 const { fnAllInStorage } = require('../config/file_config');
+const { fnSendEmail } = require('../config/mailer_config');
 const _uploadMiddleware = multer({ storage: fnAllInStorage }).array('file');
+const moment = require('moment');
 
-const fnTestApp = (req, res) => {
+const fnTestApp = async (req, res) => {
     try {
-        const message = _fnGetTeam(email);//'This is MessagE'
-        // _fnGetTeam(email);
-        logger.info(`fnTestApp ${message}`)
+        const message = 'this is message';
+        logger.info(`fnTestApp ${message}`);
+
         return res.status(200).json({ message });
     } catch (err) {
         return logger.warn('fnTestApp', err)
     }
 
+}
+
+const fnDashboard = async (req, res) => {
+    try {
+        const BID = parseInt(req.currentUserData.BID) || 0;
+        if (!BID) return httpResponse.fnPreConditionFailed(res);
+        // Get the start and end of the current month using moment.js
+        const startDate = req.query.SD ? new Date(req.query.SD) : null;// || moment().startOf('month').toDate(); // First day of the current month
+        const endDate = req.query.ED ? new Date(req.query.ED) : null;//|| moment().endOf('month').toDate();     // Last day of the current month
+        const query = {
+            BID
+        }
+        if (startDate && endDate) {
+            query.SD = {
+                $gte: startDate,  // Start of the month
+                $lte: endDate     // End of the month
+            }
+        }
+        const pipeline = [
+            {
+                $match: query
+            },
+            {
+                $facet: {
+                    totalLoans: [
+                        {
+                            $group: {
+                                _id: "$BID",
+                                totalLoans: { $sum: 1 },
+                                totalSanction: { $sum: "$SA" },
+                                totalHold: { $sum: "$HA" }
+                            }
+                        },
+                    ],
+                    totalStatus: [
+                        {
+                            $group: {
+                                _id: "$S",
+                                totalStatus: { $sum: 1 }
+                            }
+                        }
+                    ],
+                    totalSanctionData: [
+                        {
+                            $group: {
+                                _id: "$SD",
+                                totalSD: { $sum: 1 },
+                                totalSA: { $sum: "$SA" }
+                            }
+                        }, { $sort: { totalSD: -1 } } // Sorting by totalSA in descending order
+                    ]
+                }
+            }
+        ];
+        logger.debug('Dashboard', helper.fnStringlyJSON(pipeline))
+        const data = await mongoOps.fnAggregate(loanSchema, pipeline);
+        return httpResponse.fnSuccess(res, await aes.fnEncryptAES(data));
+    } catch (error) {
+        logger.warn('fnDashboard ', error);
+        return httpResponse.fnBadRequest(res);
+    }
 }
 
 //Encrypt
@@ -111,13 +177,29 @@ const fnLogin = async (req, res) => {
             N: user.N,
             BID: user.BID,
             S: user.S || 'N/A',
-            _userId: user._id
+            _userId: user._id,
+            R: user.R
         }, constants.SECRET_KEY);
 
         //Update TKN in MongoDB
         const updateUserTKN = await mongoOps.fnFindOneAndUpdate(userSchema, { BID: user.BID, E: user.E, }, { TKN }, { new: true, lean: true, projection: { P: 0, __v: 0 } });
         //Add user in redis
-        await redisClient.hmset(redisKeys.fnUserKey(user.BID, user._id), await redisSchema.fnSetUserSchema(updateUserTKN));
+        //await redisClient.hmset(redisKeys.fnUserKey(user.BID, user._id), await redisSchema.fnSetUserSchema(updateUserTKN));
+        const userkey = redisKeys.fnUserKey(user.BID, user._id);
+        const userData = await redisSchema.fnSetUserSchema(updateUserTKN);
+
+        try {
+            await redisClient.multi()
+                .hmset(userkey, userData)
+                .expire(userkey, 3 * 24 * 60 * 60) // 3 days in seconds
+                .exec();
+
+            logger.debug('User set in Redis with expiration', userkey);
+        } catch (err) {
+            logger.warn('Error setting user in Redis:', err);
+            return httpResponse.fnConflict(res);
+        }
+        //UP: updateUserTKN.UP
         const data = await aes.fnEncryptAES({ TKN })
         //Encryption
         return httpResponse.fnSuccess(res, data);
@@ -132,6 +214,8 @@ const fnLogin = async (req, res) => {
 const fnAddUser = async (req, res) => {
     try {
         // req.body = await helper.fnParseJSON(req.body) || null
+        const userPremission = await _fnVaildatingPermission(req.currentUserData._userId, 'user', 'add');
+        if (!userPremission) return httpResponse.fnForbidden(res)
         const hashedPassword = await bcrypt.hash(req.body.P, 10);
         const BID = parseInt(req.currentUserData.BID) || 0;//UUID
         if (!BID) return httpResponse.fnPreConditionFailed(res);
@@ -163,6 +247,8 @@ const fnAddUser = async (req, res) => {
 const fnEditUser = async (req, res) => {
     try {
         // req.body = helper.fnParseJSON(req.body)\
+        const userPremission = await _fnVaildatingPermission(req.currentUserData._userId, 'user', 'edit');
+        if (!userPremission) return httpResponse.fnForbidden(res)
         const BID = parseInt(req.currentUserData.BID) || 0;//UUID
         const _id = req.body._id || null;
         if (!ObjectId.isValid(_id) || !BID) return httpResponse.fnPreConditionFailed(res);
@@ -171,6 +257,7 @@ const fnEditUser = async (req, res) => {
         if (req.body.S) updateUser.S = req.body.S;
         if (req.body.N) updateUser.N = req.body.N;
         if (req.body.R) updateUser.R = req.body.R;
+        if (req.body.UP) updateUser.UP = await helper.fnParseJSON(req.body.UP);
         req.body.BID = parseInt(req.currentUserData.BID);
         // Edit User
         await mongoOps.fnFindOneAndUpdate(userSchema, { BID, _id: new ObjectId(_id) }, updateUser)
@@ -185,6 +272,8 @@ const fnEditUser = async (req, res) => {
 //Get BasicUser 
 const fnGetUser = async (req, res) => {
     try {
+        const userPremission = await _fnVaildatingPermission(req.currentUserData._userId, 'user', 'view');
+        if (!userPremission) return httpResponse.fnForbidden(res)
         const _id = req.query._id || null;
         // _fnGetModulePermission(req.query._id, 'UM', 'info');//(_userId,moduleName,action)
         const BID = parseInt(req.currentUserData.BID) || 0;
@@ -203,9 +292,37 @@ const fnGetUser = async (req, res) => {
 const fnListUser = async (req, res) => {
     try {
         const BID = parseInt(req.currentUserData.BID) || 0;
-        //Encryption
-        const data = await aes.fnEncryptAES(await mongoOps.fnFind(userSchema, { BID }, { __v: 0, P: 0, UP: 0, _adminId: 0, updatedAt: 0 }))
-        return httpResponse.fnSuccess(res, data);
+        const userPremission = await _fnVaildatingPermission(req.currentUserData._userId, 'user', 'access');
+        if (!userPremission) return httpResponse.fnForbidden(res)
+
+        const page = parseInt(req.query.page) || 1;
+        const limit = parseInt(req.query.limit) || 10;
+        const query = BID ? { BID } : {};
+        const value = req.query.value || "";
+        const type = req.query.type || "";
+
+        if (value && type) {
+            if (type === 'N') {
+                query.N = { $regex: value, $options: 'i' };// Case-insensitive search
+            } else if (type === 'E') {
+                query.E = { $regex: value, $options: 'i' };// Case-insensitive search
+            }
+        }
+        const pipeline = [
+            { $match: query },
+            {
+                $facet: {
+                    metadata: [{ $count: "total" }],
+                    data: [
+                        { $sort: { createdAt: - 1 } },
+                        { $skip: (page - 1) * limit },
+                        { $limit: limit },
+                        { $project: { __v: 0, P: 0, UP: 0, _adminId: 0, updatedAt: 0 } },
+                    ]
+                }
+            }
+        ];
+        return httpResponse.fnSuccess(res, await aes.fnEncryptAES(await mongoOps.fnAggregate(userSchema, pipeline)));
     } catch (error) {
         logger.warn('fnListUser', error);
         return httpResponse.fnBadRequest(res);
@@ -225,14 +342,11 @@ const fnSendOTP = async (req, res) => {
         if (existingOTP) await redisClient.set(otpKey, otp);
         else await redisClient.set(otpKey, otp, 'EX', 300); // Expire in 5 minutes (300 seconds)
 
-
         // Send OTP via email 
-        await _sendEmail({
-            // bcc: "gauricodium210@gmail.com",
-            // cc: "varungokte.codium@gmail.com",
+        await fnSendEmail({
             to: email,
-            subject: 'Email Verification for ERP',
-            message: `<h1>Your OTP for ERP</h1>
+            subject: 'Email Verification for DMS',
+            message: `<h1>Your OTP for DMS</h1>
             <p>Dear User,</p>
             <p>Your OTP is: <strong>${otp}</strong></p>
             <p>Please use this OTP to complete your action on our platform.</p>
@@ -265,7 +379,8 @@ const fnVerifyOTP = async (req, res) => {
                 N: req.currentUserData.N,
                 BID,
                 S: "Active",
-                _userId
+                _userId,
+                R: req.currentUserData.R
             }, constants.SECRET_KEY);
             //User Status and TKN
             const updateUserTKN = await mongoOps.fnFindOneAndUpdate(userSchema, { E: email }, { S: "Active", TKN });
@@ -285,7 +400,8 @@ const fnCreateAID = async (req, res) => {
     try {
         const BID = parseInt(req.currentUserData.BID) || 0;
         const AID = req.body.AID || null;
-
+        const userPremission = await _fnVaildatingPermission(req.currentUserData._userId, 'loan', 'add');
+        if (!userPremission) return httpResponse.fnForbidden(res);
         if (AID) {// Creation of AID with User inputs
             const getAID = await mongoOps.fnFindOne(loanSchema, { AID })
             if (!getAID) {
@@ -309,9 +425,11 @@ const fnCreateAID = async (req, res) => {
     }
 };
 
-//Create Loan
-const fnCreateLoan = async (req, res) => {
+//Update Loan
+const fnUpdateLoan = async (req, res) => {
     try {
+        const userPremission = await _fnVaildatingPermission(req.currentUserData._userId, 'loan', 'edit');
+        if (!userPremission) return httpResponse.fnForbidden(res);
         const BID = parseInt(req.currentUserData.BID) || 0;
         const _loanId = req.body._loanId || null;
         if (!ObjectId.isValid(_loanId) || !BID) return httpResponse.fnConflict(res);
@@ -321,7 +439,7 @@ const fnCreateLoan = async (req, res) => {
         await redisClient.hmset(redisKeys.fnLoanKey(BID, _loanId), await redisSchema.fnSetLoanSchema(loan));
         return httpResponse.fnSuccess(res);
     } catch (error) {
-        logger.warn('fnCreateLoan', error)
+        logger.warn('fnUpdateLoan', error)
         return httpResponse.fnBadRequest(res);
 
     }
@@ -330,9 +448,47 @@ const fnCreateLoan = async (req, res) => {
 //Listing All Loans in Current Bussiness
 const fnListLoan = async (req, res) => {
     try {
+        const userPremission = await _fnVaildatingPermission(req.currentUserData._userId, 'loan', 'access');
+        if (!userPremission) return httpResponse.fnForbidden(res);
         const BID = parseInt(req.currentUserData.BID) || 0;
-        const data = await aes.fnEncryptAES(await mongoOps.fnFind(loanSchema, { BID }));
-        return httpResponse.fnSuccess(res, data);
+        const pageType = req.query.pageType || null;
+        const pageValue = req.query.pageValue || null;
+        const query = { BID }
+        //Pages
+        if (pageType && Array.isArray(pageValue) && pageValue.length > 0) {
+            if (pageType == 'P') query.P = { $in: pageValue };//Product
+            if (pageType == 'Z') query.Z = { $in: pageValue };//Zone
+            if (pageType == 'I') query.I = { $in: pageValue };//Industry
+        }
+
+        //filter
+        const value = req.query.value || "";
+        const type = req.query.type || "";
+
+        if (value && type) {
+            if (type === 'AID') {
+                query.AID = { $regex: value, $options: 'i' };// Case-insensitive search
+            } else if (type === 'CN') {
+                query.CN = { $regex: value, $options: 'i' };// Case-insensitive search
+            }
+        }
+        const page = parseInt(req.query.page) || 1;
+        const limit = parseInt(req.query.limit) || 10;
+        const pipeline = [
+            { $match: query },
+            {
+                $facet: {
+                    metadata: [{ $count: "total" }],
+                    data: [
+                        { $skip: (page - 1) * limit },
+                        { $limit: limit },
+                        { $project: { AID: 1, CN: 1, Z: 1, SA: 1, S: 1 } }
+                    ]
+                }
+            }
+        ];
+
+        return httpResponse.fnSuccess(res, await aes.fnEncryptAES(await mongoOps.fnAggregate(loanSchema, pipeline)));
     } catch (error) {
         logger.warn('fnListLoan', error)
         return httpResponse.fnBadRequest(res);
@@ -343,6 +499,8 @@ const fnListLoan = async (req, res) => {
 //Get Loan 
 const fnGetLoan = async (req, res) => {
     try {
+        const userPremission = await _fnVaildatingPermission(req.currentUserData._userId, 'loan', 'view');
+        if (!userPremission) return httpResponse.fnForbidden(res);
         const _id = req.query._loanId || null;
         const BID = parseInt(req.currentUserData.BID) || 0;
         if (!ObjectId.isValid(_id) || !BID) return httpResponse.fnPreConditionFailed(res);
@@ -354,28 +512,32 @@ const fnGetLoan = async (req, res) => {
     }
 }
 
-//Create Contacts
-const fnCreateContact = async (req, res) => {
+//Update Contacts
+const fnUpdateContact = async (req, res) => {
     try {
+
         const _loanId = req.body._loanId || null;
         const _contactId = req.body._contactId || null;
-        const type = req.query.type || null;
         const BID = parseInt(req.currentUserData.BID) || 0;
-        // req.body=helper.fnParseJSON(req.body)
         if (!ObjectId.isValid(_loanId) || !BID) return httpResponse.fnConflict(res);
+        // const userPremission = await _fnVaildatingPermission(req.currentUserData._userId, 'loan', 'edit');
+        // if (!userPremission) return httpResponse.fnForbidden(res);
         const loan = await mongoOps.fnFindOne(loanSchema, { _id: new ObjectId(_loanId) })
         if (loan) {
-            if (type == 'EDIT') {
+            if (_contactId) {
+                const userPremission = await _fnVaildatingPermission(req.currentUserData._userId, 'contact', 'edit');
+                if (!userPremission) return httpResponse.fnForbidden(res);
                 delete req.body.CE;
                 await mongoOps.fnFindOneAndUpdate(contactsSchema, { BID, _id: new ObjectId(_contactId) }, { ...req.body }, { new: true, lean: true });
             } else {
+                const userPremission = await _fnVaildatingPermission(req.currentUserData._userId, 'contact', 'add');
+                if (!userPremission) return httpResponse.fnForbidden(res);
                 await mongoOps.fnInsertOne(contactsSchema, { BID, ...req.body });
             }
-            // const data = await aes.fnEncryptAES({ _contactId: contact._id });
             return httpResponse.fnSuccess(res);
         } else return httpResponse.fnConflict(res);
     } catch (error) {
-        logger.warn('fnCreateContact', error);
+        logger.warn('fnUpdateContact', error);
         if (error.code === 11000) return httpResponse.fnUnprocessableContent(res);//MongoDB DuplicateKey error
         else return httpResponse.fnBadRequest(res);
     }
@@ -384,13 +546,46 @@ const fnCreateContact = async (req, res) => {
 //Get ALL Contacts
 const fnListContact = async (req, res) => {
     try {
+        const userPremission = await _fnVaildatingPermission(req.currentUserData._userId, 'contact', 'access');
+        if (!userPremission) return httpResponse.fnForbidden(res);
         const BID = parseInt(req.currentUserData.BID) || 0;
         const _loanId = req.query._loanId || null;
         if (!ObjectId.isValid(_loanId) || !BID) return httpResponse.fnPreConditionFailed(res);
-        const contacts = await mongoOps.fnFind(contactsSchema, { BID, _loanId: new ObjectId(_loanId) }, { __v: 0, })
-        //Encryption
-        const data = await aes.fnEncryptAES(contacts)
-        return httpResponse.fnSuccess(res, data);
+
+        const page = parseInt(req.query.page) || 1;
+        const limit = parseInt(req.query.limit) || 10;
+
+        const query = { BID, _loanId: new ObjectId(_loanId) }
+        //filter
+        const value = req.query.value || "";
+        const type = req.query.type || "";
+
+        if (value && type) {
+            if (type === 'CE') {
+                query.CE = { $regex: value, $options: 'i' };// Case-insensitive search
+            } else if (type === 'PN') {
+                query.PN = { $regex: value, $options: 'i' };// Case-insensitive search
+            } else if (type === 'CN') {
+                query.CN = { $regex: value, $options: 'i' };// Case-insensitive search
+            }
+        }
+
+        const pipeline = [
+            { $match: query },
+            {
+                $facet: {
+                    metadata: [{ $count: "total" }],
+                    data: [
+                        { $sort: { createdAt: -1 } },
+                        { $skip: (page - 1) * limit },
+                        { $limit: limit },
+                        { $project: { PN: 1, CE: 1, D: 1, CT: 1, createdAt: 1 } }
+                    ]
+                }
+            }
+        ];
+
+        return httpResponse.fnSuccess(res, await aes.fnEncryptAES(await mongoOps.fnAggregate(contactsSchema, pipeline)));
     } catch (error) {
         logger.warn('fnListContact', error);
         return httpResponse.fnBadRequest(res);
@@ -401,6 +596,8 @@ const fnListContact = async (req, res) => {
 //View Single Contact 
 const fnGetContact = async (req, res) => {
     try {
+        const userPremission = await _fnVaildatingPermission(req.currentUserData._userId, 'contact', 'view');
+        if (!userPremission) return httpResponse.fnForbidden(res);
         const _id = req.query._id || null;
         const BID = parseInt(req.currentUserData.BID) || 0;
         if (!ObjectId.isValid(_id) || !BID) return httpResponse.fnPreConditionFailed(res);
@@ -415,13 +612,53 @@ const fnGetContact = async (req, res) => {
 //Delete Single Contact 
 const fnDeleteContact = async (req, res) => {
     try {
+        const userPremission = await _fnVaildatingPermission(req.currentUserData._userId, 'contact', 'delete');
+        if (!userPremission) return httpResponse.fnForbidden(res);
         const _id = req.query._id || null;
         const BID = parseInt(req.currentUserData.BID) || 0;
         if (!ObjectId.isValid(_id) || !BID) return httpResponse.fnPreConditionFailed(res);
-        const data = await aes.fnEncryptAES(await mongoOps.fnDeleteOne(contactsSchema, { BID, _id: new ObjectId(req.query._id) }));
-        return httpResponse.fnSuccess(res, data);
+        await mongoOps.fnDeleteOne(contactsSchema, { BID, _id: new ObjectId(_id) });
+        return httpResponse.fnSuccess(res);
     } catch (error) {
         logger.warn('fnDeleteContact', error);
+        return httpResponse.fnBadRequest(res);
+    }
+}
+
+//Delete Single Contact 
+const fnDeleteLoan = async (req, res) => {
+    try {
+        const userPremission = await _fnVaildatingPermission(req.currentUserData._userId, 'loan', 'delete');
+        if (!userPremission) return httpResponse.fnForbidden(res);
+        const _id = req.query._id || null;
+        const BID = parseInt(req.currentUserData.BID) || 0;
+        if (!ObjectId.isValid(_id) || !BID) return httpResponse.fnPreConditionFailed(res);
+
+        const loanDetails = await mongoOps.fnFindOne(loanSchema, { BID, _id: new ObjectId(_id) });
+        await mongoOps.fnDeleteOne(loanSchema, { BID, _id: new ObjectId(_id) });
+        await mongoOps.fnDeleteOne(paymentSchema, { BID, _loanId: new ObjectId(_id) });
+        await mongoOps.fnDeleteMany(ratingSchema, { BID, _loanId: new ObjectId(_id) });
+        await mongoOps.fnDeleteMany(contactsSchema, { BID, _loanId: new ObjectId(_id) });
+        await mongoOps.fnDeleteMany(transactionSchema, { BID, _loanId: new ObjectId(_id) });
+        await mongoOps.fnDeleteMany(complianceSchema, { BID, _loanId: new ObjectId(_id) });
+        await mongoOps.fnDeleteMany(covenantsSchema, { BID, _loanId: new ObjectId(_id) });
+        await mongoOps.fnDeleteMany(subsequentSchema, { BID, _loanId: new ObjectId(_id) });
+        await mongoOps.fnDeleteMany(precedentSchema, { BID, _loanId: new ObjectId(_id) });
+        const filepath = path.join(__dirname, '..', `public/docs/${req.currentUserData.BID}/${loanDetails.AID}`);
+        if (fs.existsSync(filepath)) {
+            const stat = fs.statSync(filepath);
+            if (stat.isDirectory()) {
+                fs.rmdirSync(filepath, { recursive: true });
+                logger.debug('Deleting Loan File Details....', _id, loanDetails);
+                return httpResponse.fnSuccess(res);
+            } else {
+                return httpResponse.fnConflict(res); // Specified path is a directory, not a file
+            }
+        }
+        logger.debug('Delete Loan Account ....', _id);
+        return httpResponse.fnSuccess(res);
+    } catch (error) {
+        logger.warn('fnDeleteLoan', error);
         return httpResponse.fnBadRequest(res);
     }
 }
@@ -437,13 +674,12 @@ const fnSuggestion = async (req, res) => {
         let data = {};
         //Relationship Mapping
         if (type == 'UM') {
-            data.U = await mongoOps.fnFind(userSchema, { BID, Z }, { N: 1, E: 1 })
-            data.R = await mongoOps.fnFind(roleSchema, { BID }, { N: 1, P: 1 })
-        } else if (type == 'RM') data = await mongoOps.fnFind(managerSchema, { BID }, { N: 1, E: 1, Z: 1 })
-        else if (type == 'TT') data = await mongoOps.fnFind(userSchema, { BID, RM }, { N: 1, E: 1, _id: 0 }) //Team Team Assingment 
-        else if (type == 'AU') data = await mongoOps.fnFind(userSchema, { BID }, { N: 1, E: 1, _id: 0 }) //ALL User
+            data.U = await mongoOps.fnFind(userSchema, { BID, Z, S: 'Active' }, { N: 1, E: 1 });
+            data.R = await mongoOps.fnFind(roleSchema, { BID, S: 'Active' }, { N: 1, P: 1 });
+        } else if (type == 'RM') data = await mongoOps.fnFind(managerSchema, { BID, S: 'Active' }, { N: 1, E: 1, Z: 1 });
+        else if (type == 'TL') data = await mongoOps.fnFind(userSchema, { BID, RM, S: 'Active' }, { N: 1, E: 1, _id: 0 }); //Team Lead Assingment 
+        else if (type == 'AU') data = await mongoOps.fnFind(userSchema, { BID, S: 'Active' }, { N: 1, E: 1, _id: 0 }); //ALL User
         // logger.debug('suggtion', type, data, { BID, Z })
-        logger.debug('fnSuggestion', BID, data)
         data = await aes.fnEncryptAES(data);
         return httpResponse.fnSuccess(res, data);
     } catch (error) {
@@ -456,6 +692,8 @@ const fnSuggestion = async (req, res) => {
 //Get Team 
 const fnGetTeam = async (req, res) => {
     try {
+        const userPremission = await _fnVaildatingPermission(req.currentUserData._userId, 'team', 'view');
+        if (!userPremission) return httpResponse.fnForbidden(res);
         const BID = parseInt(req.currentUserData.BID) || 0;
         const _id = req.query._id || null;
         if (!ObjectId.isValid(_id) || !BID) return httpResponse.fnPreConditionFailed(res);
@@ -475,12 +713,19 @@ const fnUpdateTeam = async (req, res) => {
     try {
         const BID = parseInt(req.currentUserData.BID) || 0;//UUID
         const _id = req.body._id || null;
-        let data;
+        if (!req.body.TD.M || !req.body.TD.C || !req.body.CD.M || !req.body.CD.C || !req.body.C.M || !req.body.C.C || !req.body.CP.M || !req.body.CP.C || !req.body.CS.M || !req.body.CS.C || !req.body.PD.M || !req.body.PD.C) return httpResponse.fnPreConditionFailed(res);
         if (_id && !ObjectId.isValid(_id)) return httpResponse.fnPreConditionFailed(res);
-        else if (_id) await mongoOps.fnFindOneAndUpdate(teamSchema, { BID, _id: new ObjectId(_id) }, { ...req.body });
-        else data = await mongoOps.fnInsertOne(teamSchema, { BID, ...req.body })
-        data = await aes.fnEncryptAES(data);
-        return httpResponse.fnSuccess(res, data);
+        else if (_id) {
+            const userPremission = await _fnVaildatingPermission(req.currentUserData._userId, 'team', 'edit');
+            if (!userPremission) return httpResponse.fnForbidden(res);
+            await mongoOps.fnFindOneAndUpdate(teamSchema, { BID, _id: new ObjectId(_id) }, { ...req.body });
+        }
+        else {
+            const userPremission = await _fnVaildatingPermission(req.currentUserData._userId, 'team', 'add');
+            if (!userPremission) return httpResponse.fnForbidden(res);
+            await mongoOps.fnInsertOne(teamSchema, { BID, ...req.body })
+        }
+        return httpResponse.fnSuccess(res);
     } catch (error) {
         logger.warn('fnUpdateTeam', error)
         if (error.code === 11000) return httpResponse.fnUnprocessableContent(res);//MongoDB DuplicateKey error
@@ -489,8 +734,163 @@ const fnUpdateTeam = async (req, res) => {
 };
 
 //Select Team for loan 
+const fnRemoveTeams = async (req, res) => {
+    try {
+        // const userPremission = await _fnVaildatingPermission(req.currentUserData._userId, 'team', 'select');
+        // if (!userPremission) return httpResponse.fnForbidden(res);
+        const BID = parseInt(req.currentUserData.BID) || 0;//UUID
+        const email = req.body.email || null;
+        const _teamId = req.body._teamId || null;
+        if (!ObjectId.isValid(_loanId) || !ObjectId.isValid(_teamId) || !BID) return httpResponse.fnPreConditionFailed(res);
+        await mongoOps.fnFindOneAndUpdate(loanSchema, { BID, _id: new ObjectId(_loanId) }, { _teamId });
+        return httpResponse.fnSuccess(res);
+    } catch (error) {
+        logger.warn('fnRemoveTeams', error);
+        return httpResponse.fnBadRequest(res);
+    }
+}
+
+//Remove member from teams
+const fnRemoveTeamsMember = async (req, res) => {
+    try {
+        const BID = parseInt(req.currentUserData.BID) || 0;//UUID
+        const emailToRemove = req.body.E || null;
+        const data = await helper.fnParseJSON(req.body.V) || [];
+        if (!data.length) return httpResponse.fnPreConditionFailed(res);
+        const query = {
+            BID,
+            _id: { $in: data.map(id => new ObjectId(id)) }
+        };
+        const update = {
+            $pull: {
+                "TD.M": emailToRemove,
+                "TD.C": emailToRemove,
+                "CD.M": emailToRemove,
+                "CD.C": emailToRemove,
+                "C.M": emailToRemove,
+                "C.C": emailToRemove,
+                "CP.M": emailToRemove,
+                "CP.C": emailToRemove,
+                "CS.M": emailToRemove,
+                "CS.C": emailToRemove,
+                "PD.M": emailToRemove,
+                "PD.C": emailToRemove
+            }
+        };
+
+        const output = await mongoOps.fnUpdateMany(teamSchema, query, update);
+        logger.debug('output', output)
+        return httpResponse.fnSuccess(res);
+    } catch (error) {
+        logger.warn('fnRemoveTeams', error);
+        return httpResponse.fnBadRequest(res);
+    }
+}
+
+const fnReplaceTeamsMember = async (req, res) => {
+    try {
+        const BID = parseInt(req.currentUserData.BID) || 0; // UUID
+        const emailToReplace = req.body.E || null;   // Old email to be replaced
+        const newEmail = req.body.NE || null;         // New email to replace with
+        const data = await helper.fnParseJSON(req.body.V) || [];//[]
+        if (!data.length || !emailToReplace || !newEmail) {
+            return httpResponse.fnPreConditionFailed(res);
+        }
+
+        // Check if all IDs are valid ObjectId strings
+        const validIds = data.map(id => {
+            if (ObjectId.isValid(id)) {
+                return new ObjectId(id); // Convert to ObjectId if valid
+            } else {
+                throw new Error(`Invalid ObjectId: ${id}`); // Handle invalid ObjectId
+            }
+        });
+
+        // Query to find documents containing the old email
+        const query = {
+            BID,
+            _id: { $in: validIds },
+            $or: [
+                { "TD.M": emailToReplace },
+                { "TD.C": emailToReplace },
+                { "CD.M": emailToReplace },
+                { "CD.C": emailToReplace },
+                { "C.M": emailToReplace },
+                { "C.C": emailToReplace },
+                { "CP.M": emailToReplace },
+                { "CP.C": emailToReplace },
+                { "CS.M": emailToReplace },
+                { "CS.C": emailToReplace },
+                { "PD.M": emailToReplace },
+                { "PD.C": emailToReplace }
+            ]
+        };
+
+        // Step 1: Use mongoOps.fnFind to get all documents matching the query
+        const documents = await mongoOps.fnFind(teamSchema, query);
+
+        if (!documents.length) return httpResponse.fnConflict(res);
+
+        // Prepare updates for each document based on where the old email was found
+        for (const doc of documents) {
+            const updateFields = {}; // To collect specific fields for $addToSet later
+
+            // Pull old email
+            const pullUpdate = {
+                $pull: {
+                    "TD.M": emailToReplace,
+                    "TD.C": emailToReplace,
+                    "CD.M": emailToReplace,
+                    "CD.C": emailToReplace,
+                    "C.M": emailToReplace,
+                    "C.C": emailToReplace,
+                    "CP.M": emailToReplace,
+                    "CP.C": emailToReplace,
+                    "CS.M": emailToReplace,
+                    "CS.C": emailToReplace,
+                    "PD.M": emailToReplace,
+                    "PD.C": emailToReplace
+                }
+            };
+
+            // Check which fields contain the old email and add them to the updateFields
+            if (doc.TD?.M?.includes(emailToReplace)) updateFields["TD.M"] = newEmail;
+            if (doc.TD?.C?.includes(emailToReplace)) updateFields["TD.C"] = newEmail;
+            if (doc.CD?.M?.includes(emailToReplace)) updateFields["CD.M"] = newEmail;
+            if (doc.CD?.C?.includes(emailToReplace)) updateFields["CD.C"] = newEmail;
+            if (doc.C?.M?.includes(emailToReplace)) updateFields["C.M"] = newEmail;
+            if (doc.C?.C?.includes(emailToReplace)) updateFields["C.C"] = newEmail;
+            if (doc.CP?.M?.includes(emailToReplace)) updateFields["CP.M"] = newEmail;
+            if (doc.CP?.C?.includes(emailToReplace)) updateFields["CP.C"] = newEmail;
+            if (doc.CS?.M?.includes(emailToReplace)) updateFields["CS.M"] = newEmail;
+            if (doc.CS?.C?.includes(emailToReplace)) updateFields["CS.C"] = newEmail;
+            if (doc.PD?.M?.includes(emailToReplace)) updateFields["PD.M"] = newEmail;
+            if (doc.PD?.C?.includes(emailToReplace)) updateFields["PD.C"] = newEmail;
+
+            // If there are fields where the old email was found, perform the update
+            if (Object.keys(updateFields).length) {
+                const addToSetUpdate = {
+                    $addToSet: updateFields
+                };
+
+                // Step 2: Perform pull and addToSet operations
+                await mongoOps.fnUpdateOne(teamSchema, { _id: doc._id }, pullUpdate);
+                await mongoOps.fnUpdateOne(teamSchema, { _id: doc._id }, addToSetUpdate);
+            }
+        }
+        // logger.debug('output', output, 'query', helper.fnStringlyJSON(query));
+        return httpResponse.fnSuccess(res);
+    } catch (error) {
+        logger.warn('fnReplaceTeamsMember', error);
+        return httpResponse.fnBadRequest(res);
+    }
+};
+
+//Select Team for loan 
 const fnSelectTeam = async (req, res) => {
     try {
+        const userPremission = await _fnVaildatingPermission(req.currentUserData._userId, 'team', 'select');
+        if (!userPremission) return httpResponse.fnForbidden(res);
         const BID = parseInt(req.currentUserData.BID) || 0;//UUID
         const _loanId = req.body._loanId || null;
         const _teamId = req.body._teamId || null;
@@ -503,47 +903,163 @@ const fnSelectTeam = async (req, res) => {
     }
 }
 
-//List Team  + Current team 
+//List Team  +  Current team 
 const fnListTeam = async (req, res) => {
     try {
+        const userPremission = await _fnVaildatingPermission(req.currentUserData._userId, 'team', 'access');
+        if (!userPremission) return httpResponse.fnForbidden(res);
         const BID = parseInt(req.currentUserData.BID) || 0;
         const _loanId = req.query._loanId || null;
         if (!BID) return httpResponse.fnPreConditionFailed(res);
-        let data = {};
-        data.list = await mongoOps.fnFind(teamSchema, { BID })
-        if (_loanId && ObjectId.isValid(_loanId)) data.currentTeam = await mongoOps.fnFindOne(loanSchema, { BID, _id: new ObjectId(_loanId) }, { _teamId: 1 })
-        data = await aes.fnEncryptAES(data);
-        return httpResponse.fnSuccess(res, data);
+
+        const query = { BID }
+        const page = parseInt(req.query.page) || 1;
+        const limit = parseInt(req.query.limit) || 10;
+
+        //filter
+        const value = req.query.value || "";
+        const type = req.query.type || "";
+
+        if (value && type) {
+            if (type === 'L') {
+                query.L = { $regex: value, $options: 'i' };// Case-insensitive search
+            } else if (type === 'N') {
+                query.N = { $regex: value, $options: 'i' };// Case-insensitive search
+            }
+        }
+        const pipeline = [
+            { $match: query },
+            {
+                $facet: {
+                    metadata: [{ $count: "total" }],
+                    data: [
+                        { $sort: { createdAt: -1 } },
+                        { $skip: (page - 1) * limit },
+                        { $limit: limit },
+                        { $project: { N: 1, L: 1, S: 1, createdAt: 1 } }
+                    ]
+                }
+            }
+        ];
+        const data = { list: await mongoOps.fnAggregate(teamSchema, pipeline) || null };
+        if (_loanId && ObjectId.isValid(_loanId)) data.currentTeam = await mongoOps.fnFindOne(loanSchema, { BID, _id: new ObjectId(_loanId) }, { _teamId: 1, _id: 0 })
+        return httpResponse.fnSuccess(res, await aes.fnEncryptAES(data));
     } catch (error) {
         logger.warn('fnListTeam', error);
         return httpResponse.fnBadRequest(res);
     }
 }
 
-//Adding MST 
-const fnAddMST = async (req, res) => {
+//List Team  +  Current team 
+const fnGetUserTeams = async (req, res) => {
     try {
-        const BID = parseInt(req.currentUserData.BID) || 0;//UUID
+        // const userPremission = await _fnVaildatingPermission(req.currentUserData._userId, 'tranfer', 'access');
+        // if (!userPremission) return httpResponse.fnForbidden(res);
+        const BID = parseInt(req.currentUserData.BID) || 0;
         if (!BID) return httpResponse.fnPreConditionFailed(res);
-        await mongoOps.fnInsertOne(mstSchema, { BID, ...req.body });
-        return httpResponse.fnSuccess(res);
-    } catch (error) {
-        logger.warn('fnAddMST', error)
-        if (error.code === 11000) return httpResponse.fnUnprocessableContent(res);//MongoDB DuplicateKey error
-        else return httpResponse.fnBadRequest(res);
 
+        const query = { BID }
+        const page = parseInt(req.query.page) || 1;
+        const limit = parseInt(req.query.limit) || 10;
+
+        //filter
+        const email = req.query.value || "";
+
+        const pipeline = [
+            {
+                $match: {
+                    $expr: {
+                        $and: [
+                            {
+                                $or: [
+                                    { $eq: ["$L", email] },
+                                    { $in: [email, { $ifNull: ["$TD.C", []] }] },
+                                    { $in: [email, { $ifNull: ["$CD.M", []] }] },
+                                    { $in: [email, { $ifNull: ["$CD.C", []] }] },
+                                    { $in: [email, { $ifNull: ["$C.M", []] }] },
+                                    { $in: [email, { $ifNull: ["$C.C", []] }] },
+                                    { $in: [email, { $ifNull: ["$CP.M", []] }] },
+                                    { $in: [email, { $ifNull: ["$CP.C", []] }] },
+                                    { $in: [email, { $ifNull: ["$CS.M", []] }] },
+                                    { $in: [email, { $ifNull: ["$CS.C", []] }] },
+                                    { $in: [email, { $ifNull: ["$PD.M", []] }] },
+                                    { $in: [email, { $ifNull: ["$PD.C", []] }] },
+                                ]
+                            },
+                            { $eq: ["$BID", BID] }
+
+                        ]
+                    }
+                }
+            },
+            {
+                $facet: {
+                    metadata: [{ $count: "total" }],
+                    data: [
+                        { $sort: { createdAt: -1 } },
+                        { $skip: (page - 1) * limit },
+                        { $limit: limit },
+                        { $project: { N: 1, L: 1, S: 1, createdAt: 1, TD: 1, CD: 1, C: 1, CP: 1, CS: 1, PD: 1 } }
+                    ]
+                }
+            }
+        ];
+        const data = await mongoOps.fnAggregate(teamSchema, pipeline) || {};
+        return httpResponse.fnSuccess(res, await aes.fnEncryptAES(data));
+    } catch (error) {
+        logger.warn('fnGetUserTeams ', error);
+        return httpResponse.fnBadRequest(res);
     }
-};
+}
 
-//Adding MST 
-const fnEditMST = async (req, res) => {
+//Update MST 
+const fnUpdateMST = async (req, res) => {
     try {
         const BID = parseInt(req.currentUserData.BID) || 0;//UUID
-        if (!BID) return httpResponse.fnPreConditionFailed(res);
-        await mongoOps.fnFindOneAndUpdate(mstSchema, { BID, N: req.body.N }, { V: req.body.V });
+        const _id = req.body._id || null;
+
+        if (!BID || _id && !ObjectId.isValid(_id) || !req.body) return httpResponse.fnPreConditionFailed(res);
+        const body = {}
+        body['BID'] = BID
+        if (req.body.LP) body['LP'] = req.body.LP;
+        if (req.body.ZL) body['ZL'] = req.body.ZL;
+        if (req.body.FT) body['FT'] = req.body.FT;
+        if (req.body.IN) body['IN'] = req.body.IN;
+        if (req.body.LT) body['LT'] = req.body.LT;
+        if (req.body.DRR) body['DRR'] = req.body.DRR;
+        if (req.body.TRP) body['TRP'] = req.body.TRP;
+        if (req.body.PS) body['PS'] = req.body.PS;
+        if (req.body.DF) body['DF'] = req.body.DF;
+        if (req.body.LST) body['LST'] = req.body.LST;
+        if (req.body.BAT) body['BAT'] = req.body.BAT;
+        if (req.body.CT) body['CT'] = req.body.CT;
+        if (req.body.ER) body['ER'] = req.body.ER;
+        if (req.body.RA) body['RA'] = req.body.RA;
+        if (req.body.RT) body['RT'] = req.body.RT;
+        if (req.body.RO) body['RO'] = req.body.RO;
+        if (req.body.TC) body['TC'] = req.body.TC;
+        if (req.body.CC) body['CC'] = req.body.CC;
+        if (req.body.CV) body['CV'] = req.body.CV;
+        if (req.body.CTY) body['CTY'] = req.body.CTY;
+        if (req.body.CPC) body['CPC'] = req.body.CPC;
+        if (req.body.CSC) body['CSC'] = req.body.CSC;
+
+        if (Object.keys(body).length === 0) return httpResponse.fnConflict(res);
+
+        if (_id) {
+            const userPremission = await _fnVaildatingPermission(req.currentUserData._userId, 'masters', 'edit');
+            if (!userPremission) return httpResponse.fnForbidden(res);
+            logger.debug('BODY', body)
+            await mongoOps.fnFindOneAndUpdate(mstSchema, { BID, _id: new ObjectId(_id) }, { ...body })
+        } else {
+            const userPremission = await _fnVaildatingPermission(req.currentUserData._userId, 'masters', 'add');
+            if (!userPremission) return httpResponse.fnForbidden(res);
+            await mongoOps.fnInsertOne(mstSchema, { BID, ...body });
+        }
+        logger.debug('Updating MST.... _id', _id, req.body)
         return httpResponse.fnSuccess(res);
     } catch (error) {
-        logger.warn('fnEditMST', error)
+        logger.warn('fnUpdateMST', error)
         if (error.code === 11000) return httpResponse.fnUnprocessableContent(res);//MongoDB DuplicateKey error
         else return httpResponse.fnBadRequest(res);
 
@@ -553,10 +1069,12 @@ const fnEditMST = async (req, res) => {
 //List Role 
 const fnListMST = async (req, res) => {
     try {
+        const userPremission = await _fnVaildatingPermission(req.currentUserData._userId, 'masters', 'access');
+        if (!userPremission) return httpResponse.fnForbidden(res);
         const BID = parseInt(req.currentUserData.BID) || 0;
         if (!BID) return httpResponse.fnPreConditionFailed(res);
-        const data = await aes.fnEncryptAES(await mongoOps.fnFind(mstSchema, { BID }));
-        return httpResponse.fnSuccess(res, data);
+
+        return httpResponse.fnSuccess(res, await aes.fnEncryptAES(await mongoOps.fnFindOne(mstSchema, { BID })));
     } catch (error) {
         logger.warn('fnListMST', error);
         return httpResponse.fnBadRequest(res);
@@ -570,12 +1088,19 @@ const fnAddRole = async (req, res) => {
         const _id = req.body._id || null;
         if (!BID || _id && !ObjectId.isValid(_id)) return httpResponse.fnPreConditionFailed(res);
         if (_id && ObjectId.isValid(_id)) {
+            const userPremission = await _fnVaildatingPermission(req.currentUserData._userId, 'role', 'edit');
+            if (!userPremission) return httpResponse.fnForbidden(res);
             await mongoOps.fnFindOneAndUpdate(
                 roleSchema,
                 { BID, _id: new ObjectId(_id) },
                 { ...req.body }
             );
-        } else await mongoOps.fnInsertOne(roleSchema, { BID, ...req.body });
+
+        } else {
+            const userPremission = await _fnVaildatingPermission(req.currentUserData._userId, 'role', 'add');
+            if (!userPremission) return httpResponse.fnForbidden(res);
+            await mongoOps.fnInsertOne(roleSchema, { BID, ...req.body });
+        }
 
         return httpResponse.fnSuccess(res);
     } catch (error) {
@@ -589,19 +1114,39 @@ const fnAddRole = async (req, res) => {
 //List Role 
 const fnListRole = async (req, res) => {
     try {
+        const userPremission = await _fnVaildatingPermission(req.currentUserData._userId, 'role', 'access');
+        if (!userPremission) return httpResponse.fnForbidden(res);
         const BID = parseInt(req.currentUserData.BID) || 0;
         if (!BID) return httpResponse.fnPreConditionFailed(res);
-        const data = await aes.fnEncryptAES(await mongoOps.fnFind(roleSchema, { BID }));
-        return httpResponse.fnSuccess(res, data);
+
+        const page = parseInt(req.query.page) || 1;
+        const limit = parseInt(req.query.limit) || 10;
+        const pipeline = [
+            { $match: { BID } },
+            {
+                $facet: {
+                    metadata: [{ $count: "total" }],
+                    data: [
+                        { $skip: (page - 1) * limit },
+                        { $limit: limit },
+                        { $project: { N: 1, P: 1, S: 1 } }
+                    ]
+                }
+            }
+        ];
+
+        return httpResponse.fnSuccess(res, await aes.fnEncryptAES(await mongoOps.fnAggregate(roleSchema, pipeline)));
     } catch (error) {
         logger.warn('fnListRole', error);
         return httpResponse.fnBadRequest(res);
     }
 }
+
 //Adding Rating  
 const fnAddRating = async (req, res) => {
     try {
-
+        const userPremission = await _fnVaildatingPermission(req.currentUserData._userId, 'rating', 'add');
+        if (!userPremission) return httpResponse.fnForbidden(res);
         const _loanId = req.body._loanId || null
         if (!ObjectId.isValid(_loanId)) return httpResponse.fnConflict(res);
         // Add Rating
@@ -618,37 +1163,60 @@ const fnAddRating = async (req, res) => {
 //List Rating 
 const fnListRating = async (req, res) => {
     try {
+        const userPremission = await _fnVaildatingPermission(req.currentUserData._userId, 'rating', 'access');
+        if (!userPremission) return httpResponse.fnForbidden(res);
         const BID = parseInt(req.currentUserData.BID) || 0;
         const _loanId = req.query._loanId || null;
         if (!ObjectId.isValid(_loanId) || !BID) return httpResponse.fnConflict(res);
-        const data = await aes.fnEncryptAES(await mongoOps.fnFind(ratingSchema, { BID, _loanId: new ObjectId(_loanId) }));
-        return httpResponse.fnSuccess(res, data);
+        const page = parseInt(req.query.page) || 1;
+        const limit = parseInt(req.query.limit) || 10;
+        const pipeline = [
+            { $match: { BID, _loanId: new ObjectId(_loanId) } },
+            {
+                $facet: {
+                    metadata: [{ $count: "total" }],
+                    data: [
+                        { $skip: (page - 1) * limit },
+                        { $limit: limit },
+                        { $project: { A: 1, T: 1, DT: 1, O: 1, V: 1, L: 1 } }
+                    ]
+                }
+            }
+        ];
+
+        return httpResponse.fnSuccess(res, await aes.fnEncryptAES(await mongoOps.fnAggregate(ratingSchema, pipeline)));
     } catch (error) {
         logger.warn('fnListRating', error);
         return httpResponse.fnBadRequest(res);
     }
 }
 
-//Tranaction Documents
-
-//Adding Documents Details  
+//Adding Edit Delete Transaction,Compliance,Covenants,Covenants Subsequent,Covenants Precedent Documents & Payment Schedule
 const fnAddDocsDetails = async (req, res) => {
     try {
-        const BID = parseInt(req.currentUserData.BID) || 0;
-        const _loanId = req.body._loanId || null
-        if (!ObjectId.isValid(_loanId) || !req.body.SN) return httpResponse.fnPreConditionFailed(res);
-        // Add Documents Details 
-        req.body.BID = parseInt(req.currentUserData.BID) || 0;//UUID
-        let selectedDocsSchema;
-        if (req.body.SN == 'TD') { selectedDocsSchema = transactionSchema; delete req.body.SN; }
-        else if (req.body.SN == 'CD') { selectedDocsSchema = complianceSchema; delete req.body.SN; }
-        else if (req.body.SN == 'C') { selectedDocsSchema = covenantsSchema; delete req.body.SN; }
-        else if (req.body.SN == 'CS') { selectedDocsSchema = subsequentSchema; delete req.body.SN; }
-        else if (req.body.SN == 'CP') { selectedDocsSchema = precedentSchema; delete req.body.SN; }
-
-        logger.debug('Add Docs Details...', selectedDocsSchema, req.body)
-        const data = await aes.fnEncryptAES(await mongoOps.fnInsertOne(selectedDocsSchema, { BID, _loanId: new ObjectId(_loanId), ...req.body }));
-        return httpResponse.fnSuccess(res, data);
+        const BID = req.body.BID = parseInt(req.currentUserData.BID) || 0;
+        const _loanId = req.body._loanId || null;
+        const sessionName = req.body.SN || '';
+        if (!ObjectId.isValid(_loanId) || !sessionName) return httpResponse.fnPreConditionFailed(res);
+        const _userId = req.currentUserData._userId || ''
+        // const [selectedDocsSchema, userPremission] = await _fnSelectSchema(sessionName, 'add');
+        let selectedDocsSchema, userPremission;
+        switch (sessionName) {
+            case 'TD': userPremission = await _fnVaildatingPermission(req.currentUserData._userId, 'transaction', 'add', 1); selectedDocsSchema = transactionSchema; break;
+            case 'CD': userPremission = await _fnVaildatingPermission(req.currentUserData._userId, 'compliance', 'add', 1); selectedDocsSchema = complianceSchema; break;
+            case 'C': userPremission = await _fnVaildatingPermission(req.currentUserData._userId, 'covenants', 'add', 1); selectedDocsSchema = covenantsSchema; break;
+            case 'CS': userPremission = await _fnVaildatingPermission(req.currentUserData._userId, 'subsequent', 'add', 1); selectedDocsSchema = subsequentSchema; break;
+            case 'CP': userPremission = await _fnVaildatingPermission(req.currentUserData._userId, 'precedent', 'add', 1); selectedDocsSchema = precedentSchema; break;
+            default: return httpResponse.fnPreConditionFailed(res);
+        }
+        if (!userPremission) return httpResponse.fnForbidden(res);
+        delete req.body.SN;
+        logger.debug('Add Docs Details...', selectedDocsSchema, req.body);
+        const output = await mongoOps.fnInsertOne(selectedDocsSchema, { BID, _loanId: new ObjectId(_loanId), ...req.body });
+        //Notify Maker
+        const data = await mongoOps.fnFindById(loanSchema, _loanId);
+        await _fnNotify(BID, _userId, output._id, data._teamId, sessionName, 'M');
+        return httpResponse.fnSuccess(res, await aes.fnEncryptAES(output._id));
     } catch (error) {
         logger.warn('fnAddDocsDetails', error)
         if (error.code === 11000) return httpResponse.fnUnprocessableContent(res);//MongoDB DuplicateKey error
@@ -661,17 +1229,29 @@ const fnEditDocsDetails = async (req, res) => {
     try {
         const BID = parseInt(req.currentUserData.BID) || 0;
         const _id = req.body._id || null;
-
-        if (!ObjectId.isValid(_id) || !req.body.SN || !BID) return httpResponse.fnPreConditionFailed(res);
-        // Add Documents Details 
-        let selectedDocsSchema;
-        if (req.body.SN == 'TD') { selectedDocsSchema = transactionSchema; delete req.body.SN; }
-        else if (req.body.SN == 'CD') { selectedDocsSchema = complianceSchema; delete req.body.SN; }
-        else if (req.body.SN == 'C') { selectedDocsSchema = covenantsSchema; delete req.body.SN; }
-        else if (req.body.SN == 'CS') { selectedDocsSchema = subsequentSchema; delete req.body.SN; }
-        else if (req.body.SN == 'CP') { selectedDocsSchema = precedentSchema; delete req.body.SN; }
+        const sessionName = req.body.SN || '';
+        const _loanId = req.body._loanId || '';
+        const _userId = req.currentUserData._userId || '';
+        if (!ObjectId.isValid(_id) || !sessionName || !BID) return httpResponse.fnPreConditionFailed(res);
+        let selectedDocsSchema, userPremission;
+        switch (sessionName) {
+            case 'TD': userPremission = await _fnVaildatingPermission(req.currentUserData._userId, 'transaction', 'edit', 1); selectedDocsSchema = transactionSchema; break;
+            case 'CD': userPremission = await _fnVaildatingPermission(req.currentUserData._userId, 'compliance', 'edit', 1); selectedDocsSchema = complianceSchema; break;
+            case 'C': userPremission = await _fnVaildatingPermission(req.currentUserData._userId, 'covenants', 'edit', 1); selectedDocsSchema = covenantsSchema; break;
+            case 'CS': userPremission = await _fnVaildatingPermission(req.currentUserData._userId, 'subsequent', 'edit', 1); selectedDocsSchema = subsequentSchema; break;
+            case 'CP': userPremission = await _fnVaildatingPermission(req.currentUserData._userId, 'precedent', 'edit', 1); selectedDocsSchema = precedentSchema; break;
+            default: return httpResponse.fnPreConditionFailed(res);
+        }
+        if (!userPremission) return httpResponse.fnForbidden(res);
+        delete req.body.SN;
         delete req.body._loanId;
-        const result = await mongoOps.fnFindOneAndUpdate(selectedDocsSchema, { BID, _id: new ObjectId(_id) }, { ...req.body });
+        const mongoUpdate = { $set: { ...req.body } };
+        if (req.body.S == 'Verified') {
+            mongoUpdate.$unset = { DEF: 1 };
+            const data = await mongoOps.fnFindById(loanSchema, _loanId);
+            await _fnNotify(BID, _userId, _id, data._teamId, sessionName, 'L');
+        }
+        const result = await mongoOps.fnFindOneAndUpdate(selectedDocsSchema, { BID, _id: new ObjectId(_id) }, mongoUpdate);
         logger.debug('EDIT Docs Details...', selectedDocsSchema, result)
         return httpResponse.fnSuccess(res);
     } catch (error) {
@@ -688,46 +1268,97 @@ const fnListDocsDetail = async (req, res) => {
         const _loanId = req.query._loanId || null;
         const sessionName = req.query.SN || null;
         if (!ObjectId.isValid(_loanId) || !sessionName) return httpResponse.fnPreConditionFailed(res);
-        let selectedDocsSchema;
-        if (sessionName == 'TD') { selectedDocsSchema = transactionSchema; }
-        else if (sessionName == 'CD') { selectedDocsSchema = complianceSchema; }
-        else if (sessionName == 'C') { selectedDocsSchema = covenantsSchema; }
-        else if (sessionName == 'CS') { selectedDocsSchema = subsequentSchema; }
-        else if (sessionName == 'CP') { selectedDocsSchema = precedentSchema; }
+        let selectedDocsSchema, userPremission;
+        switch (sessionName) {
+            case 'TD': userPremission = await _fnVaildatingPermission(req.currentUserData._userId, 'transaction', 'access', 1); selectedDocsSchema = transactionSchema; break;
+            case 'CD': userPremission = await _fnVaildatingPermission(req.currentUserData._userId, 'compliance', 'access', 1); selectedDocsSchema = complianceSchema; break;
+            case 'C': userPremission = await _fnVaildatingPermission(req.currentUserData._userId, 'covenants', 'access', 1); selectedDocsSchema = covenantsSchema; break;
+            case 'CS': userPremission = await _fnVaildatingPermission(req.currentUserData._userId, 'subsequent', 'access', 1); selectedDocsSchema = subsequentSchema; break;
+            case 'CP': userPremission = await _fnVaildatingPermission(req.currentUserData._userId, 'precedent', 'access', 1); selectedDocsSchema = precedentSchema; break;
+            default: return httpResponse.fnPreConditionFailed(res);
+        }
+        if (!userPremission) return httpResponse.fnForbidden(res);
         if (!selectedDocsSchema) return httpResponse.fnConflict(res);
-        const DocsDetail = await mongoOps.fnFind(selectedDocsSchema, { BID, _loanId: new ObjectId(_loanId) }, { __v: 0 })
-        const data = await aes.fnEncryptAES(DocsDetail)
-        return httpResponse.fnSuccess(res, data);
+
+        const page = parseInt(req.query.page) || 1;
+        const limit = parseInt(req.query.limit) || 10;
+
+        const query = { BID, _loanId: new ObjectId(_loanId) }
+        //filter
+        const value = req.query.value || "";
+        const type = req.query.type || "";
+
+        if (value && type) {
+            if (type === 'N') {
+                query.N = { $regex: value, $options: 'i' };// Case-insensitive search
+            } else if (type === 'C') {
+                query.C = { $regex: value, $options: 'i' };// Case-insensitive search
+            } else if (type === 'S') {
+                query.S = { $regex: value, $options: 'i' };// Case-insensitive search
+            }
+        }
+
+        const pipeline = [
+            { $match: query },
+            {
+                $facet: {
+                    metadata: [{ $count: "total" }],
+                    data: [
+                        { $sort: { ED: 1 } },
+                        { $skip: (page - 1) * limit },
+                        { $limit: limit },
+                        { $project: { _v: 0 } },
+                    ]
+                }
+            }
+        ];
+
+        return httpResponse.fnSuccess(res, await aes.fnEncryptAES(await mongoOps.fnAggregate(selectedDocsSchema, pipeline)));
+
     } catch (error) {
         logger.warn('fnListDocsDetail', error);
         return httpResponse.fnBadRequest(res);
     }
 }
 
-const fnUploadTD = async (req, res) => {
+const fnUploadDocs = async (req, res) => {
     _uploadMiddleware(req, res, async () => {
         try {
             const BID = parseInt(req.currentUserData.BID) || 0;
             const LOC = req.query.LOC || null;
             const _id = req.query._id || null;
-            if (!ObjectId.isValid(_id) || !LOC || !BID) return httpResponse.fnConflict(res);
+            const _userId = req.currentUserData._userId || '';
+            if (!ObjectId.isValid(_id) || !LOC || !BID || req.files.length != 1) return httpResponse.fnPreConditionFailed(res);
             const sessionName = LOC.split("/").slice(-1)[0] || null;
+
+            const query = { BID, _id: new ObjectId(_id) };
+            let body = { S: "In progress" };
+            // const body = { $push: { FD: { $each: req.files }, $set: { S: 2 } } }
+
             let selectedDocsSchema;
             if (sessionName == 'TD') { selectedDocsSchema = transactionSchema; }
             else if (sessionName == 'CD') { selectedDocsSchema = complianceSchema; }
             else if (sessionName == 'C') { selectedDocsSchema = covenantsSchema; }
             else if (sessionName == 'CS') { selectedDocsSchema = subsequentSchema; }
             else if (sessionName == 'CP') { selectedDocsSchema = precedentSchema; }
-            // const body = { $push: { FD: { $each: req.files }, $set: { S: 2 } } }
-            const query = { BID, _id: new ObjectId(_id) };
-            const body = { S: "In progress", FD: req.files }
-
-            await mongoOps.fnFindOneAndUpdate(selectedDocsSchema, query, body);
+            else if (sessionName == 'PD') {
+                const index = req.query.POS || 0;
+                if (!index) return httpResponse.fnPreConditionFailed(res);
+                body = {}
+                body[`GS.${index}.S`] = 'In progress'
+                body[`GS.${index}.FD`] = req.files
+                await mongoOps.fnFindOneAndUpdate(paymentSchema, query, body);
+                return httpResponse.fnSuccess(res);
+            }
+            body.FD = req.files;
+            const output = await mongoOps.fnFindOneAndUpdate(selectedDocsSchema, query, body);
             logger.debug('Uploading file ......', LOC, _id, req.files)
-
+            //Notify Checker
+            const data = await mongoOps.fnFindById(loanSchema, output._loanId);
+            await _fnNotify(BID, _userId, output._id, data._teamId, sessionName, 'C');
             return httpResponse.fnSuccess(res);
         } catch (error) {
-            logger.warn('fnUploadTD ', error);
+            logger.warn('fnUploadDocs ', error);
             if (error.code === 11000) return httpResponse.fnUnprocessableContent(res);//MongoDB DuplicateKey error
             else return httpResponse.fnBadRequest(res);
         }
@@ -736,37 +1367,6 @@ const fnUploadTD = async (req, res) => {
     // return httpResponse.fnSuccess(res);
 
 };
-
-// const fnUpdateTD = async (req, res) => {
-//     _uploadMiddleware(req, res, async () => {
-//         try {
-//             if (req.body.data) req.body = await aes.fnDecryptAES(req.body.data);
-//             logger.warn('_uploadMiddleware ', req.body, req.files)
-//             const BID = parseInt(req.currentUserData.BID) || 0;
-//             if (!req.files || req.files.length === 0) {
-//                 if (req.body.data) req.body = await aes.fnDecryptAES(req.body.data);
-//                 else return httpResponse.fnPreConditionFailed(res);
-//             }
-//             const sessionName = req.body.LOC.split("/")[1] || null;
-//             const folderName = req.body.LOC.split("/")[2] || null;
-//             const _id = req.body._id || null;
-//             let selectedDocsSchema = transactionSchema;
-//             if (!ObjectId.isValid(_id) || !selectedDocsSchema || !BID || !folderName || !sessionName) return httpResponse.fnConflict(res);
-//             const query = { BID, _id: new ObjectId(_id) };
-//             delete req.body.N;//Prevent to Update Session Name
-//             const body = { ...req.body, $push: { Docs: { $each: req.files } } }
-//             if (sessionName == 'TD') selectedDocsSchema = transactionSchema
-
-//             await mongoOps.fnFindOneAndUpdate(selectedDocsSchema, query, body);
-//             return httpResponse.fnSuccess(res);
-//         } catch (error) {
-//             logger.warn('fnUpdateTD ', error);
-//             return httpResponse.fnBadRequest(res);
-//         }
-//     });
-//     return null;
-
-// };
 
 const fnViewDocs = async (req, res) => {
     try {
@@ -811,7 +1411,6 @@ const fnListDocs = async (req, res) => {
             if (err) return httpResponse.fnConflict(res);
             const data = await aes.fnEncryptAES({ files });
             return httpResponse.fnSuccess(res, data);
-            // return httpResponse.fnSuccess(res, { files });
         });
         return null;
     } catch (error) {
@@ -834,18 +1433,46 @@ const fnDeleteDocs = async (req, res) => {
             if (stat.isFile()) {
                 const sessionName = req.query.LOC.split("/")[1] || null;
                 let selectedDocsSchema;
-                if (sessionName == 'TD') selectedDocsSchema = transactionSchema
+                if (sessionName == 'TD') { selectedDocsSchema = transactionSchema; }
                 else if (sessionName == 'CD') { selectedDocsSchema = complianceSchema; }
                 else if (sessionName == 'C') { selectedDocsSchema = covenantsSchema; }
                 else if (sessionName == 'CS') { selectedDocsSchema = subsequentSchema; }
                 else if (sessionName == 'CP') { selectedDocsSchema = precedentSchema; }
+                else if (sessionName == 'PD') {
+                    const index = req.query.POS || 0;
+                    if (!index) return httpResponse.fnPreConditionFailed(res);
+                    // Create the update object dynamically
+                    const updateBody = {
+                        $set: {},
+                        $unset: {}
+                    };
+                    const query = { BID, _id: new ObjectId(_id) };
+                    updateBody.$set[`GS.${index}.S`] = 'Pending';  // Set status S to "Pending"
+                    updateBody.$unset[`GS.${index}.FD`] = 1;      // Unset FD
+                    // Perform the update using fnFindOneAndUpdate
+                    await mongoOps.fnFindOneAndUpdate(paymentSchema, query, updateBody);
+                    await fs.unlink(filepath, (err) => {
+                        if (err) {
+                            logger.warn(`Error deleting ${filepath}:`, err);
+                        } else {
+                            logger.debug(`Payment Successfully Deleted...... ${filepath}`, _id);
+                        }
+                    });
+                    return httpResponse.fnSuccess(res);
+                }
 
                 const query = { BID, _id: new ObjectId(_id), 'FD.filename': filename };
                 const body = { $set: { S: "Pending" }, $unset: { FD: 1 } }
 
-                logger.debug('Deleting Docs ....', filepath, _id)
                 await mongoOps.fnFindOneAndUpdate(selectedDocsSchema, query, body);
-                fs.unlinkSync(filepath); // Delete only the file
+                // fs.unlinkSync(filepath); // Delete only the file
+                await fs.unlink(filepath, (err) => {
+                    if (err) {
+                        logger.warn(`Error deleting ${filepath}:`, err);
+                    } else {
+                        logger.debug(`File Successfully deleted...... ${filepath}`, _id);
+                    }
+                });
                 return httpResponse.fnSuccess(res);
             } else {
                 return httpResponse.fnConflict(res); // Specified path is a directory, not a file
@@ -854,39 +1481,143 @@ const fnDeleteDocs = async (req, res) => {
             return httpResponse.fnPreConditionFailed(res); // File not found
         }
     } catch (error) {
-        console.error('fnDeleteDocs error:', error);
+        logger.warn('fnDeleteDocs error:', error);
         return res.status(400).send('Bad Request');
+    }
+};
+
+//Update Payment Details
+const fnUpdatePaymentDetails = async (req, res) => {
+    try {
+        const BID = parseInt(req.currentUserData.BID) || 0;
+        const _userId = req.currentUserData._userId || '';
+        const _loanId = req.body._loanId || null
+        const _id = req.body._id || null
+        if (!BID) return httpResponse.fnPreConditionFailed(res);
+        if (_id && ObjectId.isValid(_id)) { // Edit Documents Details 
+            req.body.BID = parseInt(req.currentUserData.BID) || 0;//UUID
+            let data = await mongoOps.fnFindOneAndUpdate(paymentSchema, { BID, _id: new ObjectId(_id) }, { GS: req.body.GS })
+            logger.debug('Update Payment  Details GS', data);
+            //Notify Checker
+            if (req.body.GS && req.body.POS >= 0 && req.body.GS[req.body.POS].S == 'Verified') {
+                const loan = await mongoOps.fnFindById(loanSchema, data._loanId);
+                await _fnNotify(BID, _userId, _id, loan._teamId, 'PD', 'L');
+            }
+            return httpResponse.fnSuccess(res);
+        }
+        else if (!_id && _loanId && ObjectId.isValid(_loanId)) {// Add Documents Details 
+            req.body.BID = parseInt(req.currentUserData.BID) || 0;//UUID
+            let data = await mongoOps.fnInsertOne(paymentSchema, { BID, _loanId: new ObjectId(_loanId), ...req.body })
+            logger.debug('Added Payment  Details...', data)
+            const loan = await mongoOps.fnFindById(loanSchema, _loanId);
+            await _fnNotify(BID, _userId, data._id, loan._teamId, 'PD', 'M');
+            return httpResponse.fnSuccess(res);
+        }
+
+    } catch (error) {
+        logger.warn('fnUpdatePaymentDetails', error)
+        if (error.code === 11000) return httpResponse.fnUnprocessableContent(res);//MongoDB DuplicateKey error
+        else return httpResponse.fnBadRequest(res);
+
+    }
+    return null;
+};
+
+const fnListPaymentDetails = async (req, res) => {
+    try {
+        const BID = parseInt(req.currentUserData.BID) || 0;
+        const _loanId = req.query._loanId || null
+        if (!ObjectId.isValid(_loanId) || !BID) return httpResponse.fnPreConditionFailed(res);
+        req.body.BID = parseInt(req.currentUserData.BID) || 0;//UUID
+        const page = parseInt(req.query.page) || 1;
+        const limit = parseInt(req.query.limit) || 10;
+        const pipeline = [
+            { $match: { BID, _loanId: new ObjectId(_loanId) } },
+            {
+                $facet: {
+                    metadata: [{ $count: "total" }],
+                    data: [
+                        { $skip: (page - 1) * limit },
+                        { $limit: limit },
+                        { $project: { _v: 0 } }
+                    ]
+                }
+            }
+        ];
+
+        return httpResponse.fnSuccess(res, await aes.fnEncryptAES(await mongoOps.fnAggregate(paymentSchema, pipeline)));
+
+    } catch (error) {
+        logger.warn('fnListPaymentDetails', error)
+        return httpResponse.fnBadRequest(res);
     }
 };
 
 const fnAssignListDocsDetail = async (req, res) => {
     try {
         const email = req.currentUserData.E;
+        const BID = req.currentUserData.BID;
         const sessionName = req.query.SN;
+        const page = parseInt(req.query.page) || 1;
+        const limit = parseInt(req.query.limit) || 10;
         let selectedDocsSchemaName;
-        if (!email || !sessionName) return httpResponse.fnConflict(res);
-        logger.debug(email, sessionName)
-        if (sessionName == 'TD') selectedDocsSchemaName = "transaction_models";
-        else if (sessionName == 'CD') selectedDocsSchemaName = "compliance_models";
-        else if (sessionName == 'C') selectedDocsSchemaName = "covenants_models";
-        else if (sessionName == 'CP') selectedDocsSchemaName = "precedent_models";
-        else if (sessionName == 'CS') selectedDocsSchemaName = "subsequent_models";
+        const specificConditions = [];
+
+        switch (sessionName) {
+            case 'TD':
+                selectedDocsSchemaName = "transaction_models";
+                specificConditions.push(
+                    { $in: [email, { $ifNull: ["$TD.M", []] }] },
+                    { $in: [email, { $ifNull: ["$TD.C", []] }] }
+                );
+                break;
+            case 'CD':
+                selectedDocsSchemaName = "compliance_models";
+                specificConditions.push(
+                    { $in: [email, { $ifNull: ["$CD.M", []] }] },
+                    { $in: [email, { $ifNull: ["$CD.C", []] }] }
+                );
+                break;
+            case 'C':
+                selectedDocsSchemaName = "covenants_models";
+                specificConditions.push(
+                    { $in: [email, { $ifNull: ["$C.M", []] }] },
+                    { $in: [email, { $ifNull: ["$C.C", []] }] }
+                );
+                break;
+            case 'CP':
+                selectedDocsSchemaName = "precedent_models";
+                specificConditions.push(
+                    { $in: [email, { $ifNull: ["$CP.M", []] }] },
+                    { $in: [email, { $ifNull: ["$CP.C", []] }] }
+                );
+                break;
+            case 'CS':
+                selectedDocsSchemaName = "subsequent_models";
+                specificConditions.push(
+                    { $in: [email, { $ifNull: ["$CS.M", []] }] },
+                    { $in: [email, { $ifNull: ["$CS.C", []] }] }
+                );
+                break;
+            case 'PD':
+                selectedDocsSchemaName = "payment_models";
+                specificConditions.push(
+                    { $in: [email, { $ifNull: ["$PD.M", []] }] },
+                    { $in: [email, { $ifNull: ["$PD.C", []] }] }
+                );
+                break;
+            default:
+                return httpResponse.fnConflict(res);
+        }
+
+
         const query = [
             {
                 $match: {
                     $expr: {
-                        $or: [
-                            { $eq: ["$L", email] },
-                            { "$in": [email, "$TD.M"] },
-                            { "$in": [email, "$TD.C"] },
-                            { "$in": [email, "$CD.M"] },
-                            { "$in": [email, "$CD.C"] },
-                            { "$in": [email, "$C.M"] },
-                            { "$in": [email, "$C.C"] },
-                            { "$in": [email, "$CP.M"] },
-                            { "$in": [email, "$CP.C"] },
-                            { "$in": [email, "$CS.M"] },
-                            { "$in": [email, "$CS.C"] }
+                        $and: [
+                            { $or: [{ $eq: ["$L", email] }, ...specificConditions] },
+                            { $eq: ["$BID", BID] }
                         ]
                     }
                 }
@@ -900,7 +1631,7 @@ const fnAssignListDocsDetail = async (req, res) => {
                 }
             },
             {
-                $unwind: "$loanDetails" // Unwind the loanDetails array
+                $unwind: "$loanDetails", // Unwind the loanDetails array
             },
             {
                 $lookup: {
@@ -945,15 +1676,750 @@ const fnAssignListDocsDetail = async (req, res) => {
                         }
                     }
                 }
+            },
+            {
+                $facet: {
+                    metadata: [{ $count: "total" }],
+                    data: [
+                        { $sort: { SD: -1 } },
+                        { $skip: (page - 1) * limit },
+                        { $limit: limit },
+                        { $project: { _v: 0 } },
+                    ]
+                }
             }
         ];
-        logger.debug(helper.fnStringlyJSON(query));
+        logger.debug('QuErY', helper.fnStringlyJSON(query));
         let output = await mongoOps.fnAggregate(teamSchema, query);
         const data = await aes.fnEncryptAES(output);
         return httpResponse.fnSuccess(res, data);
         // return output;
     } catch (error) {
-        return logger.warn('fnAssignListDocsDetail', error);
+        logger.warn('fnAssignListDocsDetail', error);
+        return httpResponse.fnBadRequest(res);
+    }
+}
+
+const fnAssignListDefault = async (req, res) => {
+    try {
+        const email = req.currentUserData.E;
+        const BID = req.currentUserData.BID;
+        const page = parseInt(req.query.page) || 1;
+        const limit = parseInt(req.query.limit) || 10;
+        const sessionName = req.query.SN || null;
+        let selectedDocsSchemaName;
+        const specificConditions = [];
+        // Selection of Schema 
+        switch (sessionName) {
+            case 'TD':
+                selectedDocsSchemaName = "transaction_models";
+                specificConditions.push(
+                    { $in: [email, { $ifNull: ["$TD.M", []] }] },
+                    { $in: [email, { $ifNull: ["$TD.C", []] }] }
+                );
+                break;
+            case 'CD':
+                selectedDocsSchemaName = "compliance_models";
+                specificConditions.push(
+                    { $in: [email, { $ifNull: ["$CD.M", []] }] },
+                    { $in: [email, { $ifNull: ["$CD.C", []] }] }
+                );
+                break;
+            case 'C':
+                selectedDocsSchemaName = "covenants_models";
+                specificConditions.push(
+                    { $in: [email, { $ifNull: ["$C.M", []] }] },
+                    { $in: [email, { $ifNull: ["$C.C", []] }] }
+                );
+                break;
+            case 'CP':
+                selectedDocsSchemaName = "precedent_models";
+                specificConditions.push(
+                    { $in: [email, { $ifNull: ["$CP.M", []] }] },
+                    { $in: [email, { $ifNull: ["$CP.C", []] }] }
+                );
+                break;
+            case 'CS':
+                selectedDocsSchemaName = "subsequent_models";
+                specificConditions.push(
+                    { $in: [email, { $ifNull: ["$CS.M", []] }] },
+                    { $in: [email, { $ifNull: ["$CS.C", []] }] }
+                );
+                break;
+            case 'PD':
+                selectedDocsSchemaName = "payment_models";
+                specificConditions.push(
+                    { $in: [email, { $ifNull: ["$PD.M", []] }] },
+                    { $in: [email, { $ifNull: ["$PD.C", []] }] }
+                );
+                break;
+            default:
+                return httpResponse.fnConflict(res);
+        }
+        const query = [
+            {
+                $match: {
+                    $expr: {
+                        $and: [
+                            { $or: [{ $eq: ["$L", email] }, ...specificConditions] },
+                            { $eq: ["$BID", BID] }
+                        ]
+                    }
+                }
+            },
+            {
+                $lookup: {
+                    from: "loan_models",
+                    localField: "_id",
+                    foreignField: "_teamId",
+                    as: "loanDetails"
+                }
+            },
+            {
+                $unwind: "$loanDetails"
+            },
+            {
+                $lookup: {
+                    from: selectedDocsSchemaName,
+                    localField: "loanDetails._id",
+                    foreignField: "_loanId",
+                    as: "docsDetails",
+                    pipeline: [
+                        {
+                            $match: {
+                                $expr: {
+                                    $eq: ["$DEF", 1]
+                                }
+                            }
+                        }
+                    ]
+                }
+            },
+            {
+                $unwind: "$docsDetails"
+            },
+            {
+                $project: {
+                    _id: 1,
+                    L: 1,
+                    N: 1,
+                    _loanId: "$loanDetails._id",
+                    AID: "$loanDetails.AID",
+                    SD: "$loanDetails.SD",
+                    DN: "$docsDetails.N",
+                    DC: "$docsDetails.C",
+                    SD: "$docsDetails.SD",
+                    ED: "$docsDetails.ED",
+                    DS: "$docsDetails.S",
+                    FD: "$docsDetails.FD",
+                    _fileId: "$docsDetails._id",
+                }
+            },
+
+            {
+                $facet: {
+                    metadata: [{ $count: "total" }],
+                    data: [
+                        { $sort: { SD: -1 } },
+                        { $skip: (page - 1) * limit },
+                        { $limit: limit },
+                        { $project: { _v: 0 } }
+                    ]
+                }
+            }
+        ];
+        logger.debug('DefaulteR QuErY', helper.fnStringlyJSON(query));
+        let output = await mongoOps.fnAggregate(teamSchema, query);
+
+        const data = await aes.fnEncryptAES(output);
+        return httpResponse.fnSuccess(res, data);
+        // return output;
+    } catch (error) {
+        logger.warn('fnAssignListDefault', error);
+        return httpResponse.fnBadRequest(res);
+    }
+}
+
+const fnAssignListCriticalCase = async (req, res) => {
+    try {
+        const email = req.currentUserData.E;
+        const BID = req.currentUserData.BID;
+        const page = parseInt(req.query.page) || 1;
+        const limit = parseInt(req.query.limit) || 10;
+        const sessionName = req.query.SN || null;
+        let selectedDocsSchemaName;
+        const specificConditions = [];
+        // Selection of Schema 
+        switch (sessionName) {
+            case 'TD':
+                selectedDocsSchemaName = "transaction_models";
+                specificConditions.push(
+                    { $in: [email, { $ifNull: ["$TD.M", []] }] },
+                    { $in: [email, { $ifNull: ["$TD.C", []] }] }
+                );
+                break;
+            case 'CD':
+                selectedDocsSchemaName = "compliance_models";
+                specificConditions.push(
+                    { $in: [email, { $ifNull: ["$CD.M", []] }] },
+                    { $in: [email, { $ifNull: ["$CD.C", []] }] }
+                );
+                break;
+            case 'C':
+                selectedDocsSchemaName = "covenants_models";
+                specificConditions.push(
+                    { $in: [email, { $ifNull: ["$C.M", []] }] },
+                    { $in: [email, { $ifNull: ["$C.C", []] }] }
+                );
+                break;
+            case 'CP':
+                selectedDocsSchemaName = "precedent_models";
+                specificConditions.push(
+                    { $in: [email, { $ifNull: ["$CP.M", []] }] },
+                    { $in: [email, { $ifNull: ["$CP.C", []] }] }
+                );
+                break;
+            case 'CS':
+                selectedDocsSchemaName = "subsequent_models";
+                specificConditions.push(
+                    { $in: [email, { $ifNull: ["$CS.M", []] }] },
+                    { $in: [email, { $ifNull: ["$CS.C", []] }] }
+                );
+                break;
+            case 'PD':
+                selectedDocsSchemaName = "payment_models";
+                specificConditions.push(
+                    { $in: [email, { $ifNull: ["$PD.M", []] }] },
+                    { $in: [email, { $ifNull: ["$PD.C", []] }] }
+                );
+                break;
+            default:
+                return httpResponse.fnConflict(res);
+        }
+        const query = [
+            {
+                $match: {
+                    $expr: {
+                        $and: [
+                            { $or: [{ $eq: ["$L", email] }, ...specificConditions] },
+                            { $eq: ["$BID", BID] }
+                        ]
+                    }
+                }
+            },
+            {
+                $lookup: {
+                    from: "loan_models",
+                    localField: "_id",
+                    foreignField: "_teamId",
+                    as: "loanDetails"
+                }
+            },
+            {
+                $unwind: "$loanDetails"
+            },
+            {
+                $lookup: {
+                    from: selectedDocsSchemaName,
+                    localField: "loanDetails._id",
+                    foreignField: "_loanId",
+                    as: "docsDetails",
+                    pipeline: [
+                        {
+                            $match: {
+                                $expr: {
+                                    $eq: ["$P", "High"]
+                                }
+                            }
+                        }
+                    ]
+                }
+            },
+            {
+                $unwind: "$docsDetails"
+            },
+            {
+                $project: {
+                    _id: 1,
+                    L: 1,
+                    N: 1,
+                    _loanId: "$loanDetails._id",
+                    AID: "$loanDetails.AID",
+                    SD: "$loanDetails.SD",
+                    DN: "$docsDetails.N",
+                    DC: "$docsDetails.C",
+                    SD: "$docsDetails.SD",
+                    ED: "$docsDetails.ED",
+                    DS: "$docsDetails.S",
+                    DP: "$docsDetails.P",
+                    FD: "$docsDetails.FD",
+                    _fileId: "$docsDetails._id",
+
+                }
+            },
+
+            {
+                $facet: {
+                    metadata: [{ $count: "total" }],
+                    data: [
+                        { $sort: { SD: -1 } },
+                        { $skip: (page - 1) * limit },
+                        { $limit: limit },
+                        { $project: { _v: 0 } }
+                    ]
+                }
+            }
+        ];
+        logger.debug('Critial CaSe QuErY', helper.fnStringlyJSON(query));
+        let output = await mongoOps.fnAggregate(teamSchema, query);
+
+        const data = await aes.fnEncryptAES(output);
+        return httpResponse.fnSuccess(res, data);
+    } catch (error) {
+        logger.warn('fnAssignListCriticalCase', error);
+        return httpResponse.fnBadRequest(res);
+    }
+}
+
+const fnMSTListDocsDetail = async (req, res) => {
+    try {
+        const BID = req.currentUserData.BID;
+        const sessionName = req.query.SN;
+        const page = parseInt(req.query.page) || 1;
+        const limit = parseInt(req.query.limit) || 10;
+        let selectedDocsSchemaName;
+        switch (sessionName) {
+            case 'TD': selectedDocsSchemaName = "transaction_models"; break;
+            case 'CD': selectedDocsSchemaName = "compliance_models"; break;
+            case 'C': selectedDocsSchemaName = "covenants_models"; break;
+            case 'CP': selectedDocsSchemaName = "precedent_models"; break;
+            case 'CS': selectedDocsSchemaName = "subsequent_models"; break;
+            case 'PD': selectedDocsSchemaName = "payment_models"; break;
+            default: return httpResponse.fnConflict(res);
+        }
+
+
+        const pipeline = [
+            {
+                $match: {
+                    BID
+                }
+            },
+            {
+                $lookup: {
+                    from: "loan_models",
+                    localField: "_id",
+                    foreignField: "_teamId",
+                    as: "loanDetails"
+                }
+            },
+            {
+                $unwind: "$loanDetails", // Unwind the loanDetails array
+            },
+            {
+                $lookup: {
+                    from: selectedDocsSchemaName,
+                    localField: "loanDetails._id",
+                    foreignField: "_loanId",
+                    as: "docsDetails"
+                }
+            },
+            {
+                $unwind: "$docsDetails"
+            },
+            {
+                $project: {
+                    _id: 1,
+                    L: 1,
+                    N: 1,
+                    _loanId: "$loanDetails._id",
+                    AID: "$loanDetails.AID",
+                    CN: "$loanDetails.CN",
+                    SD: "$loanDetails.SD",
+                    S: "$docsDetails.S"
+                }
+            },
+            {
+                $group:
+
+                {
+                    _id: "$_loanId",
+                    AID: {
+                        $first: "$AID"
+                    },
+                    CN: {
+                        $first: "$CN"
+                    },
+                    SD: {
+                        $first: "$SD"
+                    },
+                    details: {
+                        $push: {
+                            S: "$S"
+                        }
+                    }
+                }
+            },
+            {
+                $facet: {
+                    metadata: [{ $count: "total" }],
+                    data: [
+                        { $sort: { SD: -1 } },
+                        { $skip: (page - 1) * limit },
+                        { $limit: limit },
+                        { $project: { _v: 0 } }
+                    ]
+                }
+            }
+        ];
+        logger.debug('{MST} QuErY', helper.fnStringlyJSON(pipeline));
+        let output = await mongoOps.fnAggregate(teamSchema, pipeline);
+        const data = await aes.fnEncryptAES(output);
+        return httpResponse.fnSuccess(res, data);
+        // return output;
+    } catch (error) {
+        logger.warn('fnMSTListDocsDetail', error);
+        return httpResponse.fnBadRequest(res);
+    }
+}
+
+const fnMSTListDefault = async (req, res) => {
+    try {
+        // const userPremission = await _fnVaildatingPermission(req.currentUserData._userId, 'mst_defaultor', 'access');
+        // if (!userPremission) return httpResponse.fnForbidden(res);
+        const BID = req.currentUserData.BID;
+        const page = parseInt(req.query.page) || 1;
+        const limit = parseInt(req.query.limit) || 10;
+        const sessionName = req.query.SN || null;
+        let selectedDocsSchemaName;
+        // Selection of Schema 
+        switch (sessionName) {
+            case 'TD': selectedDocsSchemaName = "transaction_models"; break;
+            case 'CD': selectedDocsSchemaName = "compliance_models"; break;
+            case 'C': selectedDocsSchemaName = "covenants_models"; break;
+            case 'CP': selectedDocsSchemaName = "precedent_models"; break;
+            case 'CS': selectedDocsSchemaName = "subsequent_models"; break;
+            case 'PD': selectedDocsSchemaName = "payment_models"; break;
+            default: return httpResponse.fnConflict(res);
+        }
+        const query = [
+            {
+                $match: { BID }
+            },
+            {
+                $lookup: {
+                    from: "loan_models",
+                    localField: "_id",
+                    foreignField: "_teamId",
+                    as: "loanDetails"
+                }
+            },
+            {
+                $unwind: "$loanDetails"
+            },
+            {
+                $lookup: {
+                    from: selectedDocsSchemaName,
+                    localField: "loanDetails._id",
+                    foreignField: "_loanId",
+                    as: "docsDetails",
+                    pipeline: [
+                        {
+                            $match: {
+                                $expr: {
+                                    $eq: ["$DEF", 1]
+                                }
+                            }
+                        }
+                    ]
+                }
+            },
+            {
+                $unwind: "$docsDetails"
+            },
+            {
+                $project: {
+                    _id: 1,
+                    L: 1,
+                    N: 1,
+                    _loanId: "$loanDetails._id",
+                    AID: "$loanDetails.AID",
+                    SD: "$loanDetails.SD",
+                    DN: "$docsDetails.N",
+                    DC: "$docsDetails.C",
+                    SD: "$docsDetails.SD",
+                    ED: "$docsDetails.ED",
+                    DS: "$docsDetails.S",
+                    FD: "$docsDetails.FD",
+                    _fileId: "$docsDetails._id",
+                }
+            },
+
+            {
+                $facet: {
+                    metadata: [{ $count: "total" }],
+                    data: [
+                        { $sort: { SD: -1 } },
+                        { $skip: (page - 1) * limit },
+                        { $limit: limit },
+                        { $project: { _v: 0 } }
+                    ]
+                }
+            }
+        ];
+        logger.debug('{MST} DefaulteR QuErY', helper.fnStringlyJSON(query));
+        let output = await mongoOps.fnAggregate(teamSchema, query);
+
+        const data = await aes.fnEncryptAES(output);
+        return httpResponse.fnSuccess(res, data);
+        // return output;
+    } catch (error) {
+        logger.warn('fnMSTListDefault', error);
+        return httpResponse.fnBadRequest(res);
+    }
+}
+
+const fnMSTListCriticalCase = async (req, res) => {
+    try {
+        // const userPremission = await _fnVaildatingPermission(req.currentUserData._userId, 'mst_critical', 'access');
+        // if (!userPremission) return httpResponse.fnForbidden(res);
+        const BID = req.currentUserData.BID;
+        const page = parseInt(req.query.page) || 1;
+        const limit = parseInt(req.query.limit) || 10;
+        const sessionName = req.query.SN || null;
+        let selectedDocsSchemaName;
+        // Selection of Schema 
+        switch (sessionName) {
+            case 'TD': selectedDocsSchemaName = "transaction_models"; break;
+            case 'CD': selectedDocsSchemaName = "compliance_models"; break;
+            case 'C': selectedDocsSchemaName = "covenants_models"; break;
+            case 'CP': selectedDocsSchemaName = "precedent_models"; break;
+            case 'CS': selectedDocsSchemaName = "subsequent_models"; break;
+            case 'PD': selectedDocsSchemaName = "payment_models"; break;
+            default: return httpResponse.fnConflict(res);
+        }
+        const query = [
+            {
+                $match: { BID }
+            },
+            {
+                $lookup: {
+                    from: "loan_models",
+                    localField: "_id",
+                    foreignField: "_teamId",
+                    as: "loanDetails"
+                }
+            },
+            {
+                $unwind: "$loanDetails"
+            },
+            {
+                $lookup: {
+                    from: selectedDocsSchemaName,
+                    localField: "loanDetails._id",
+                    foreignField: "_loanId",
+                    as: "docsDetails",
+                    pipeline: [
+                        {
+                            $match: {
+                                $expr: {
+                                    $eq: ["$P", "High"]
+                                }
+                            }
+                        }
+                    ]
+                }
+            },
+            {
+                $unwind: "$docsDetails"
+            },
+            {
+                $project: {
+                    _id: 1,
+                    L: 1,
+                    N: 1,
+                    _loanId: "$loanDetails._id",
+                    AID: "$loanDetails.AID",
+                    SD: "$loanDetails.SD",
+                    DN: "$docsDetails.N",
+                    DC: "$docsDetails.C",
+                    SD: "$docsDetails.SD",
+                    ED: "$docsDetails.ED",
+                    DS: "$docsDetails.S",
+                    DP: "$docsDetails.P",
+                    FD: "$docsDetails.FD",
+                    _fileId: "$docsDetails._id",
+
+                }
+            },
+
+            {
+                $facet: {
+                    metadata: [{ $count: "total" }],
+                    data: [
+                        { $sort: { SD: -1 } },
+                        { $skip: (page - 1) * limit },
+                        { $limit: limit },
+                        { $project: { _v: 0 } }
+                    ]
+                }
+            }
+        ];
+        logger.debug('{MST} Critial CaSe QuErY', helper.fnStringlyJSON(query));
+        let output = await mongoOps.fnAggregate(teamSchema, query);
+
+        const data = await aes.fnEncryptAES(output);
+        return httpResponse.fnSuccess(res, data);
+    } catch (error) {
+        logger.warn('fnMSTListCriticalCase', error);
+        return httpResponse.fnBadRequest(res);
+    }
+}
+
+const fnMSTAssignListDocsDetail = async (req, res) => {
+    try {
+        const BID = req.currentUserData.BID;
+        const email = req.query.E;
+        const sessionName = req.query.SN;
+        const page = parseInt(req.query.page) || 1;
+        const limit = parseInt(req.query.limit) || 10;
+        let selectedDocsSchemaName;
+        const specificConditions = [];
+
+        switch (sessionName) {
+            case 'TD':
+                selectedDocsSchemaName = "transaction_models";
+                specificConditions.push(
+                    { $in: [email, { $ifNull: ["$TD.M", []] }] },
+                    { $in: [email, { $ifNull: ["$TD.C", []] }] }
+                );
+                break;
+            case 'CD':
+                selectedDocsSchemaName = "compliance_models";
+                specificConditions.push(
+                    { $in: [email, { $ifNull: ["$CD.M", []] }] },
+                    { $in: [email, { $ifNull: ["$CD.C", []] }] }
+                );
+                break;
+            case 'C':
+                selectedDocsSchemaName = "covenants_models";
+                specificConditions.push(
+                    { $in: [email, { $ifNull: ["$C.M", []] }] },
+                    { $in: [email, { $ifNull: ["$C.C", []] }] }
+                );
+                break;
+            case 'CP':
+                selectedDocsSchemaName = "precedent_models";
+                specificConditions.push(
+                    { $in: [email, { $ifNull: ["$CP.M", []] }] },
+                    { $in: [email, { $ifNull: ["$CP.C", []] }] }
+                );
+                break;
+            case 'CS':
+                selectedDocsSchemaName = "subsequent_models";
+                specificConditions.push(
+                    { $in: [email, { $ifNull: ["$CS.M", []] }] },
+                    { $in: [email, { $ifNull: ["$CS.C", []] }] }
+                );
+                break;
+            case 'PD':
+                selectedDocsSchemaName = "payment_models";
+                specificConditions.push(
+                    { $in: [email, { $ifNull: ["$PD.M", []] }] },
+                    { $in: [email, { $ifNull: ["$PD.C", []] }] }
+                );
+                break;
+            default:
+                return httpResponse.fnConflict(res);
+        }
+
+
+        const query = [
+            {
+                $match: {
+                    $expr: {
+                        $and: [
+                            { $or: [{ $eq: ["$L", email] }, ...specificConditions] },
+                            { $eq: ["$BID", BID] }
+                        ]
+                    }
+                }
+            },
+            {
+                $lookup: {
+                    from: "loan_models",
+                    localField: "_id",
+                    foreignField: "_teamId",
+                    as: "loanDetails"
+                }
+            },
+            {
+                $unwind: "$loanDetails", // Unwind the loanDetails array
+            },
+            {
+                $lookup: {
+                    from: selectedDocsSchemaName,
+                    localField: "loanDetails._id",
+                    foreignField: "_loanId",
+                    as: "docsDetails"
+                }
+            },
+            {
+                $unwind: "$docsDetails"
+            },
+            {
+                $project: {
+                    _id: 1,
+                    L: 1,
+                    N: 1,
+                    _loanId: "$loanDetails._id",
+                    AID: "$loanDetails.AID",
+                    CN: "$loanDetails.CN",
+                    SD: "$loanDetails.SD",
+                    S: "$docsDetails.S"
+                }
+            },
+            {
+                $group:
+
+                {
+                    _id: "$_loanId",
+                    AID: {
+                        $first: "$AID"
+                    },
+                    CN: {
+                        $first: "$CN"
+                    },
+                    SD: {
+                        $first: "$SD"
+                    },
+                    details: {
+                        $push: {
+                            S: "$S"
+                        }
+                    }
+                }
+            },
+            {
+                $facet: {
+                    metadata: [{ $count: "total" }],
+                    data: [
+                        { $sort: { SD: -1 } },
+                        { $skip: (page - 1) * limit },
+                        { $limit: limit },
+                        { $project: { _v: 0 } }
+                    ]
+                }
+            }
+        ];
+        logger.debug('{MST}Query', helper.fnStringlyJSON(query));
+        let output = await mongoOps.fnAggregate(teamSchema, query);
+        const data = await aes.fnEncryptAES(output);
+        return httpResponse.fnSuccess(res, data);
+        // return output;
+    } catch (error) {
+        logger.warn('fnMSTAssignListDocsDetail', error);
+        return httpResponse.fnBadRequest(res);
     }
 }
 
@@ -969,10 +2435,11 @@ module.exports = {
     fnVerifyOTP,
     fnGetUser,
     fnGetContact,
+    fnDeleteLoan,
     fnDeleteContact,
     fnListUser,
-    fnCreateLoan,
-    fnCreateContact,
+    fnUpdateLoan,
+    fnUpdateContact,
     fnListContact,
     fnGetLoan,
     fnCreateAID,
@@ -981,60 +2448,112 @@ module.exports = {
     fnGetTeam,
     fnUpdateTeam,
     fnSelectTeam,
+    fnGetUserTeams,
     fnListTeam,
     fnAddRole,
     fnListRole,
     fnAddRating,
     fnListRating,
-    fnUploadTD,
+    fnUploadDocs,
     fnListDocs,
     fnListDocsDetail,
-    // fnUpdateTD,
+    fnAssignListDefault,
+    fnAssignListCriticalCase,
+    fnMSTAssignListDocsDetail,
+    fnMSTListDocsDetail,
     fnViewDocs,
     fnDownloadDocs,
     fnDeleteDocs,
     fnAddDocsDetails,
+    fnUpdatePaymentDetails,
     fnEditDocsDetails,
-    fnAddMST,
+    fnUpdateMST,
     fnListMST,
-    fnEditMST,
-    fnAssignListDocsDetail
+    fnAssignListDocsDetail,
+    fnListPaymentDetails,
+    fnMSTListDocsDetail,
+    fnMSTListDefault,
+    fnMSTListCriticalCase,
+    fnRemoveTeams,
+    fnRemoveTeamsMember,
+    fnReplaceTeamsMember,
+    fnDashboard
 }
 
 const _sendEmail = async (options) => {
-    const transporter = nodeMailer.createTransport({
-        host: process.env.SMPT_HOST,
-        port: process.env.SMPT_PORT,
-        secure: false, // Use SSL
-        auth: {
-            user: process.env.SMPT_MAIL,
-            pass: process.env.SMPT_APP_PASS,
-        },
+    try {
+        const transporter = nodeMailer.createTransport({
+            host: process.env.SMPT_HOST,
+            port: process.env.SMPT_PORT,
+            secure: false, // Use SSL
+            auth: {
+                user: process.env.SMPT_MAIL,
+                pass: process.env.SMPT_APP_PASS,
+            },
 
-    });
+        });
 
-    const mailOptions = {
-        from: process.env.SMPT_MAIL,
-        to: options.to,
-        // cc: options.cc,
-        // bcc: options.bcc,
-        subject: options.subject,
-        html: options.message,
-    };
+        const mailOptions = {
+            from: process.env.SMPT_MAIL,
+            to: options.to,
+            // cc: options.cc,
+            // bcc: options.bcc,
+            subject: options.subject,
+            html: options.message,
+        };
 
-    return await transporter.sendMail(mailOptions);
+        return await transporter.sendMail(mailOptions);
+    } catch (error) {
+        logger.warn('Error sending email:', error);
+        return null;
+    }
+}
+
+const _fnVaildatingPermission = async (_id, moduleName = null, sPremission = 'access', flag = 0) => {
+    try {
+        const userPermissionDoc = await mongoOps.fnFindById(userSchema, _id, { UP: 1, _id: 0 });
+        const userPermission = userPermissionDoc ? userPermissionDoc.UP : null;
+        // logger.debug(userPermission)
+        if (!userPermission) return false;
+
+        // logger.debug(moduleName, sPremission, userPermission[moduleName])
+        if (!flag) return userPermission[moduleName] && userPermission[moduleName].includes(sPremission);
+        else return userPermission[moduleName] && userPermission[moduleName].docs && userPermission[moduleName].docs.includes(sPremission);
+
+        // return null;
+    } catch (error) {
+        logger.warn('_fnVaildatingPermission', error);
+        return false;
+    }
+};
+
+const _fnSelectSchema = async (sessionName, operation) => {
+    try {
+        let selectedDocsSchema, userPremission;
+        switch (sessionName) {
+            case 'TD': userPremission = await _fnVaildatingPermission(req.currentUserData._userId, 'transaction', operation, 1); selectedDocsSchema = transactionSchema; break;
+            case 'CD': userPremission = await _fnVaildatingPermission(req.currentUserData._userId, 'compliance', operation, 1); selectedDocsSchema = complianceSchema; break;
+            case 'C': userPremission = await _fnVaildatingPermission(req.currentUserData._userId, 'covenants', operation, 1); selectedDocsSchema = covenantsSchema; break;
+            case 'CS': userPremission = await _fnVaildatingPermission(req.currentUserData._userId, 'subsequent', operation, 1); selectedDocsSchema = subsequentSchema; break;
+            case 'CP': userPremission = await _fnVaildatingPermission(req.currentUserData._userId, 'precedent', operation, 1); selectedDocsSchema = precedentSchema; break;
+            default: return httpResponse.fnPreConditionFailed(res);
+        }
+        return { selectedDocsSchema, userPremission };
+    } catch (error) {
+        logger.warn('_fnSelectSchema', error);
+        return null;
+    }
 }
 
 const _fnGetPermission = async (_id, moduleName = null) => {
     try {
-        const aPr = await mongoOps.fnFindOne(userSchema, { _id: new ObjectId(_id) }, { _id: 0, P: 1 });
+        const aPr = await mongoOps.fnFindOne(userSchema, { _id: new ObjectId(_id) }, { _id: 0, UP: 1 });
         if (moduleName == "UM") return aPr.P.UM;
         else return aPr.P;
     } catch (error) {
         return logger.warn('_fnGetPermission', error);
     }
 }
-
 
 const _fnGetModulePermission = async (_userId = null, moduleName = null, action = null) => {
 
@@ -1050,9 +2569,152 @@ const _fnGetModulePermission = async (_userId = null, moduleName = null, action 
     // return false;
 }
 
+const _fnSendEmails = async (recipients = [], emailContent = { subject: 'Blank', message: 'Empty Body' }) => {
+    const failedEmails = []; // Array to store emails that failed to send
 
-const _fnDecryptFileData = async (data) => {
-    return await aes.fnDecryptAES(data)
+    await Promise.all(
+        recipients.map(async (email) => {
+            try {
+                await fnSendEmail({
+                    to: email,
+                    ...emailContent
+                });
+                logger.debug(`Email sent to ${email}`);
+            } catch (error) {
+                logger.warn(`Failed to send email to ${email}:`, error);
+                failedEmails.push(email); // Add the failed email to the array
+            }
+        })
+    );
+
+    if (failedEmails.length > 0) {
+        logger.debug('Failed to send emails to the following addresses:');
+        logger.debug(failedEmails);
+    } else {
+        logger.debug('All emails were sent successfully.');
+    }
+    return null;
+};
+
+const _fnNotify = async (BID = 0, _actionUserId = '', documentId = null, _teamId = null, sessionName = null, teamRole = null) => {
+    try {
+        if (!documentId || !_teamId || !BID || !_actionUserId) return null;
+        logger.debug('_fnNotify', documentId, _teamId);
+        const data = await mongoOps.fnFindById(teamSchema, _teamId);
+        let documentDetails;
+        //  = await mongoOps.fnFindById(teamSchema, documentId);
+
+        const teamName = data.N || 'tempTeam';
+        const teamLead = data.L || 'tempLead';
+        const leadEmailContent = {
+            subject: 'Document Successfully Verified',
+            message: `
+            <h1>Document Successfully Verified</h1>
+            <p>Dear ${teamLead} ,</p>
+            <p>We are pleased to inform you that the document with name<strong>${documentId}</strong> has been successfully verified.</p>
+            <p>Our verification  ${teamName} team has thoroughly reviewed the document, and the process is now complete.</p>
+            <p>If you have any questions or need further information, please feel free to reach out.</p>
+            <p>Thank you for your cooperation.</p>
+            <p>Best regards,</p>
+            <p>The Verification Team</p>`,
+        };
+        const makerEmailContent = {
+            subject: 'File Created: Upload Pending',
+            message: `
+                <h1>File Created: Upload Pending</h1>
+                <p>Dear Maker,</p>
+                <p>We would like to inform you that the file successfully created.</p>
+                <p>However, please note that the upload process for the document with the ID <strong>${documentId}</strong> is still pending. Our ${teamName} team is working to complete the upload as soon as possible.</p>
+                <p>You will be notified once the upload is complete and the file is available for access.</p>
+                <p>If you have any questions or need further assistance, please feel free to reach out.</p>
+                <p>Thank you for your understanding.</p>
+                <p>Best regards,</p>
+                <p>The File Management Team</p>`,
+        };
+        const checkerEmailContent = {
+            subject: 'Action Required: Document Verification Needed',
+            message: `
+                <h1>Action Required: Document Verification Needed</h1>
+                <p>Dear Checker,</p>
+                <p>This is a reminder that the document with the ID <strong>${documentId}</strong> is pending verification by our ${teamName} team.</p>
+                <p>Please review and verify the document </p>
+                <p>Your prompt attention to this matter is greatly appreciated.</p>
+                <p>If you have any questions or require further assistance, please do not hesitate to contact us.</p>
+                <p>Thank you for your cooperation.</p>
+                <p>Best regards,</p>
+                <p>The Verification Team</p>`,
+        };
+
+        if (teamRole == 'L') {
+            logger.debug('teamLead teamName, documentId', teamLead, teamName, documentId)
+            await _fnSendEmails([data.L], leadEmailContent);
+        }
+        else if (sessionName == 'TD' && data.TD) {
+            documentDetails = await mongoOps.fnFindById(transactionSchema, documentId);
+            if (teamRole == 'M') {
+                logger.debug('Maker', data.TD.M)
+                await _fnSendEmails(data.TD.M, makerEmailContent);
+            } else if (teamRole == 'C') {
+                logger.debug('Checker', data.TD.C)
+                await _fnSendEmails(data.TD.C, checkerEmailContent);
+            }
+        }
+        else if (sessionName == 'CD' && data.CD) {
+            documentDetails = await mongoOps.fnFindById(complianceSchema, documentId);
+            if (teamRole == 'M') {
+                logger.debug('Maker', data.CD.M)
+                await _fnSendEmails(data.CD.M, makerEmailContent);
+            } else if (teamRole == 'C') {
+                logger.debug('Checker', data.CD.C)
+                await _fnSendEmails(data.CD.C, checkerEmailContent);
+            }
+        }
+        else if (sessionName == 'C' && data.C) {
+            documentDetails = await mongoOps.fnFindById(covenantsSchema, documentId);
+            if (teamRole == 'M') {
+                logger.debug('Maker', data.C.M)
+                await _fnSendEmails(data.C.M, makerEmailContent);
+            } else if (teamRole == 'C') {
+                logger.debug('Checker', data.C.C)
+                await _fnSendEmails(data.C.C, checkerEmailContent);
+            }
+        }
+        else if (sessionName == 'CS' && data.CS) {
+            documentDetails = await mongoOps.fnFindById(subsequentSchema, documentId);
+            if (teamRole == 'M') {
+                logger.debug('Maker', data.CS.M)
+                await _fnSendEmails(data.CS.M, makerEmailContent);
+            } else if (teamRole == 'C') {
+                logger.debug('Checker', data.CS.C)
+                await _fnSendEmails(data.CS.C, checkerEmailContent);
+            }
+        }
+        else if (sessionName == 'CP' && data.CP) {
+            documentDetails = await mongoOps.fnFindById(precedentSchema, documentId);
+            if (teamRole == 'M') {
+                logger.debug('Maker', data.CP.M)
+                await _fnSendEmails(data.CP.M, makerEmailContent);
+            } else if (teamRole == 'C') {
+                logger.debug('Checker', data.CP.C)
+                await _fnSendEmails(data.CP.C, checkerEmailContent);
+            }
+        }
+        else if (sessionName == 'PD' && data.PD) {
+            if (teamRole == 'M') {
+                logger.debug('Maker', data.PD.M)
+                await _fnSendEmails(data.PD.M, makerEmailContent);
+            } else if (teamRole == 'C') {
+                logger.debug('Checker', data.PD.C)
+                await _fnSendEmails(data.PD.C, checkerEmailContent);
+            }
+        }
+        // const output = await mongoOps.fnInsertOne(allDocsSchema, { BID, _loanId: new ObjectId(_loanId), ...req.body });
+
+    } catch (error) {
+        logger.warn(' _fnNotify error', error)
+
+    }
+    return null;
 
 }
 

@@ -6,23 +6,25 @@
  */
 const mongoose = require('mongoose');
 
-const transactionSchema = new mongoose.Schema({
+const allDocSchema = new mongoose.Schema({
     BID: { type: Number, required: true },
-    N: { type: String, required: true, trim: true, },
-    R: { type: String, trim: true, },
+    DN: { type: String, required: true, trim: true },
+    SN: { type: String, required: true, trim: true },
+    AID: { type: String, required: true, trim: true },
+    // R: { type: String, trim: true, },
     C: { type: String, required: true },
-    P: { type: String, required: true },
-    DEF: { type: Number },
-    SD: { type: Date, required: true },
-    ED: { type: Date, required: true },
-    EL: { type: String, trim: true },
-    PL: { type: String, trim: true },
+    // P: { type: String, required: true },
+    // DEF: { type: Number },
+    // SD: { type: Date, required: true },
+    // ED: { type: Date, required: true },
+    // EL: { type: String, trim: true },
+    // PL: { type: String, trim: true },
     _loanId: {
         type: mongoose.Schema.Types.ObjectId,
         ref: 'loan_model',
         required: true
     },
-    FD: { type: Object, trim: true },
+    // FD: { type: Object, trim: true },
     S: {
         type: String,
         required: true,
@@ -36,11 +38,12 @@ const transactionSchema = new mongoose.Schema({
     }
 );
 
-module.exports = mongoose.model('transaction_model', transactionSchema);
+module.exports = mongoose.model('allDocs_history', allDocSchema);
 
 /**
- * 
- * N - Name
+ * DN-Document Name
+ * SN-Session Name
+ * AID - Agreement ID
  * C - Category
  *    1-Common Loan Agreements / Facility Agreement/Loan Agreement 
  *    2-Security Trustee Agreement

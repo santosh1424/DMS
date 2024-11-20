@@ -31,8 +31,8 @@ const managerUser = new mongoose.Schema({
         type: String,
         required: true,
         trim: true,
-        enum: ['Unverified', 'Active', 'Inactive'],
-        default: 'Unverified'
+        enum: [ 'Active', 'Inactive'],
+        default: 'Active'
     },
     BID: {
         type: Number,

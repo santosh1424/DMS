@@ -6,7 +6,7 @@
  * Codium Technology
  * 
  */
-
+const ObjectId = require('mongoose').Types.ObjectId;
 
 const fnFind = async (collectionName, query = {}, projection = {}, options = { new: true, lean: true }) => {
     return await collectionName.find(query, projection, options)
@@ -15,6 +15,11 @@ const fnFind = async (collectionName, query = {}, projection = {}, options = { n
 const fnFindOne = async (collectionName, query, projection = {}, options = { new: true, lean: true }) => {
     return await collectionName.findOne(query, projection, options)
 }
+
+const fnFindById = async (collectionName, id, projection = {}) => {
+    return await collectionName.findById(id, projection).lean();
+}
+
 const fnFindOneAndUpdate = async (collectionName, query, update, options = { new: true, lean: true }) => {
     return await collectionName.findOneAndUpdate(query, update, options)
 }
@@ -47,6 +52,19 @@ const fnSave = async (collectionName, documents) => {
     return await newDocument.save();
 };
 
+const fnUpdateMany = async (collectionName, query, update) => {
+    return { updateData: await collectionName.find(query, { _id: 1 }), metaData: await collectionName.updateOne(query, update) }
+};
+const fnUpdateOne = async (collectionName, query, update) => {
+    return { updateData: await collectionName.findOne(query, { _id: 1 }), metaData: await collectionName.updateOne(query, update) }
+};
+
+// Fetch and update documents, then save the updated documents to the data object
+const fnUpdateAndFetch = async (schema, query, update) => {
+    await mongoOps.fnUpdateMany(schema, query, update);
+    return mongoOps.fnFind(schema, { ...query, DEF: 1 });
+};
+
 module.exports = {
     fnFind,
     fnFindOne,
@@ -57,5 +75,9 @@ module.exports = {
     fnDeleteMany,
     fnInsertOne,
     fnInsertMany,
-    fnSave
+    fnSave,
+    fnFindById,
+    fnUpdateMany,
+    fnUpdateOne
+    // fnUpdateAndFetch
 }
